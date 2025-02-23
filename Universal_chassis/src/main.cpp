@@ -1,79 +1,46 @@
 /*
  * @Author: wds2dxh wdsnpshy@163.com
  * @Date: 2025-02-17 16:34:08
- * @Description: 示例测试程序，展示如何使用 CarController 控制小车进行速度模式和位置模式运动
+ * @Description: 示例测试程序，展示如何使用 CarController 以及 MQTT 控制小车运动
  */
 
 #include <Arduino.h>
 #include "StepperMotor/StepperMotor.h"
 #include "CarController/CarController.h"
 #include "KinematicsModel/KinematicsModel.h"
-#include <vector>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "task/Mqtt_Control.hpp"
 
 // 初始化 ESP32 硬件串口（示例使用 Serial00）
 HardwareSerial Serial00(0);
 
-// 创建步进电机实例，分别对应小车的四个轮（编号1~4）
+// 创建主控板及四个轮的步进电机实例
 StepperMotor motor0(0, &Serial00, ChecksumType::FIXED, 1000);
 StepperMotor motor1(1, &Serial00, ChecksumType::FIXED, 1000);
 StepperMotor motor2(2, &Serial00, ChecksumType::FIXED, 1000);
 StepperMotor motor3(3, &Serial00, ChecksumType::FIXED, 1000);
 StepperMotor motor4(4, &Serial00, ChecksumType::FIXED, 1000);
 
-// 创建普通轮运动学模型实例：参数为轮子半径 0.1m 和左右轮距 0.3m
+// 创建普通轮运动学模型实例：例子中轮子半径为 0.08m, 轮距 0.6m
 NormalWheelKinematics normalKinematics(0.08f, 0.6f);
 
-// 创建 CarController 实例，传入四个步进电机及运动学模型
+// 创建 CarController 对象（传入四个轮及主控板电机和运动学模型）
 CarController carController(&motor1, &motor2, &motor3, &motor4, &motor0, &normalKinematics);
 
+// 在全局声明 MQTT 控制对象
+MqttControl mqttControl(&carController);
+
 void setup() {
-    
     Serial00.begin(115200, SERIAL_8N1, RX, TX);
-    
     Serial.begin(115200);
-    //一直循环直到Serial 初始化成功
-    // while (!Serial.available()) { vTaskDelay(10); }
 
-    // 设置初始细分和加速度// 
-    carController.configure(CarControllerConfig{10.0f, 256*6, 5.0f});   //0表示256细分,6是减速比
-
-
+    // 启动 MQTT 控制，内部会连接 WiFi、MQTT 并启动 FreeRTOS 任务
+    mqttControl.begin(100);
 }
 
 void loop() {
-
-    while (!Serial.available()) { vTaskDelay(10); }
-    String input = Serial.readStringUntil('\n');
-
-
-    bool result = false;
-
-    // --------------------------
-    // CarController 速度模式示例
-    // Serial.println("set speed");
-
-    // result = carController.setSpeed(1, 0, 0, 5000);
-    // Serial.print("speed mode result: ");
-    // Serial.println(result ? "success" : "failure");
-
-    // --------------------------
-    // CarController 位置模式示例
-    // Serial.println("set position");
-    // // 控制小车前进 1.0 m（位置模式下，旋转角度为 0）
-    result = carController.moveDistance(2, 0, 0);
-    Serial.print("position mode result: ");
-    Serial.println(result ? "success" : "failure");
-
-    vTaskDelay(1000);
-    // // 获取当前小车状态
-    CarState state = carController.getCarState();
-    Serial.print("current speed: ");
-    Serial.print(state.wheelSpeeds[0]); Serial.print("  ");
-    Serial.print(state.wheelSpeeds[1]); Serial.print("  ");
-    Serial.print(state.wheelSpeeds[2]); Serial.print("  ");
-    Serial.println(state.wheelSpeeds[3]);
-
+    // 主 loop 中无需过多处理，MQTT 任务已在后台运行
+    vTaskDelay(pdMS_TO_TICKS(1000));
 }
 

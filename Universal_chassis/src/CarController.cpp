@@ -80,14 +80,51 @@ bool CarController::setSpeed(float vx, float vy, float omega, uint32_t duration_
     if (!motorRF->syncMove())
         success = false;
     
-    // 延时运动时间（使用 FreeRTOS 延时，避免阻塞）
-    vTaskDelay(pdMS_TO_TICKS(duration_ms));
+    
     
     // 运动时间结束后停止所有电机
-    if (duration_ms != 0){  
-        stop();
+    // if (duration_ms != 0){  
+    // // 延时运动时间（使用 FreeRTOS 延时，避免阻塞）
+    //     vTaskDelay(pdMS_TO_TICKS(duration_ms));
+    //     stop();
+    // }
+    // 单独启动一个任务，延时duration_ms后停止，防止在这里堵塞其他任务
+    // 注意：需要在CarController类中添加成员变量 uint32_t stopDelayMs; 来存储延时时间
+
+    // 创建任务
+    stopDelayMs = duration_ms;
+    if (stopTaskHandle == nullptr) {
+    xTaskCreate(
+        [](void* param) {  // 使用无捕获列表的lambda表达式
+            CarController* controller = static_cast<CarController*>(param);
+            vTaskDelay(pdMS_TO_TICKS(controller->stopDelayMs));  // 从类成员获取延时时间
+            controller->stop();
+            vTaskDelete(nullptr);  // 删除当前任务
+        },  // Ensure the lambda is cast to TaskFunction_t
+        "stopTask",
+        4096,
+        this,
+        1,
+        &stopTaskHandle
+    );
     }
-    
+    else {
+        vTaskDelete(stopTaskHandle);
+        this->stop();
+        //删除任务后创建任务
+        xTaskCreate(
+            [](void* param) {
+                CarController* controller = static_cast<CarController*>(param);
+                vTaskDelay(pdMS_TO_TICKS(controller->stopDelayMs));
+                controller->stop();
+            },
+            "stopTask",
+            4096,
+            this,
+            1,
+            &stopTaskHandle
+        );
+    }
     return success;
 }
 

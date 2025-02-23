@@ -161,5 +161,8 @@ private:
 
     //初始化CarControllerConfig, 默认加速度为10.0, 默认细分数为16
     CarControllerConfig defaultConfig;
+    int stopDelayMs = 0; // 停止延迟时间，用于单独启动一个任务，延时stopDelayMs后停止，防止在这里堵塞其他任务
+    //任务句柄
+    TaskHandle_t stopTaskHandle = nullptr;
 
 };
