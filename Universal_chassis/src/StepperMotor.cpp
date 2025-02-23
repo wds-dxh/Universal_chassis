@@ -450,6 +450,37 @@ bool StepperMotor::readSystemStatus(SystemStatus &status) {
     status.motorStatus = response[23];
     return true;
 }
+
+// 读取电机实时目标位置
+bool StepperMotor::readRealTimeTargetPosition(int32_t &targetPosition) {
+    // 构造命令帧，功能码为 0x33，无额外 payload 数据
+    auto frame = buildFrame(0x33);
+    std::vector<uint8_t> response;
+    if (!sendCommand(frame, response))
+        return false;
+    
+    // 检查返回数据长度：应为 8 字节（地址 + 0x33 + 符号 + 4字节目标位置 + 校验字节）
+    if (response.size() != 8 || response[0] != motorAddr || response[1] != 0x33)
+        return false;
+    
+    uint8_t sign = response[2];  // 第3个字节为符号
+    // 提取后面4字节为目标位置数据（大端顺序）
+    uint32_t rawValue = (static_cast<uint32_t>(response[3]) << 24) |
+                        (static_cast<uint32_t>(response[4]) << 16) |
+                        (static_cast<uint32_t>(response[5]) << 8)  |
+                        (static_cast<uint32_t>(response[6]));
+    
+    // 根据符号进行转换：0x01 表示负数，0x00 表示正数
+    if (sign == 0x01)
+        targetPosition = -static_cast<int32_t>(rawValue);
+    else if (sign == 0x00)
+        targetPosition = static_cast<int32_t>(rawValue);
+    else
+        return false;  // 非法符号位
+    
+    return true;
+}
+
 /************************************* 修改命令 *************************************/
 // 修改任意细分命令
 bool StepperMotor::modifySubdivision(uint8_t subdivision, bool store) {

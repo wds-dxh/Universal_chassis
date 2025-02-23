@@ -37,7 +37,7 @@ void setup() {
     // while (!Serial.available()) { vTaskDelay(10); }
 
     // 设置初始细分和加速度// 
-    carController.configure(CarControllerConfig{10.0f, 256*6, 5.0f});   //0表示256细分,6是减速比
+    carController.configure(CarControllerConfig{10.0f, 256*6, 1.0f});   //0表示256细分,6是减速比
 
 
 }
@@ -47,6 +47,25 @@ void loop() {
     while (!Serial.available()) { vTaskDelay(10); }
     String input = Serial.readStringUntil('\n');
 
+
+
+    bool output = motor1.modifySubdivision(0, true);
+    Serial.print("motor1 subdivision: ");
+    Serial.println(output);
+
+    output = motor2.modifySubdivision(0, true);
+    Serial.print("motor2 subdivision: ");
+    Serial.println(output);
+
+    output = motor3.modifySubdivision(0, true);
+    Serial.print("motor3 subdivision: ");
+    Serial.println(output);
+     
+    output = motor4.modifySubdivision(0, true);
+    Serial.print("motor4 subdivision: ");
+    Serial.println(output);
+
+   
 
     bool result = false;
 
@@ -60,20 +79,19 @@ void loop() {
 
     // --------------------------
     // CarController 位置模式示例
-    // Serial.println("set position");
-    // // 控制小车前进 1.0 m（位置模式下，旋转角度为 0）
-    result = carController.moveDistance(2, 0, 0);
+    Serial.println("set position");
+    // 控制小车前进 1.0 m（位置模式下，旋转角度为 0）
+    result = carController.moveDistance(0.56, 0, 0);
     Serial.print("position mode result: ");
     Serial.println(result ? "success" : "failure");
 
-    vTaskDelay(1000);
     // // 获取当前小车状态
-    CarState state = carController.getCarState();
-    Serial.print("current speed: ");
-    Serial.print(state.wheelSpeeds[0]); Serial.print("  ");
-    Serial.print(state.wheelSpeeds[1]); Serial.print("  ");
-    Serial.print(state.wheelSpeeds[2]); Serial.print("  ");
-    Serial.println(state.wheelSpeeds[3]);
+    // CarState state = carController.getCarState();
+    // Serial.print("当前各轮转速反馈: ");
+    // Serial.print(state.wheelSpeeds[0]); Serial.print("  ");
+    // Serial.print(state.wheelSpeeds[1]); Serial.print("  ");
+    // Serial.print(state.wheelSpeeds[2]); Serial.print("  ");
+    // Serial.println(state.wheelSpeeds[3]);
 
 }
 
