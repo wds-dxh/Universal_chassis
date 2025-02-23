@@ -4,7 +4,7 @@
  * @Description: 
  * Copyright (c) 2025 by ${wds2dxh}, All Rights Reserved. 
 -->
-# 群体具身智能--通用底盘
+# 群体具身智能--通用底盘控制系统
 
 ## 项目概述
 本项目旨在实现基于MQTT协议控制小车的前端控制界面，采用前后端混合开发方式（目前先实现前端部分）。
@@ -20,6 +20,19 @@
   - 下方按钮：后退
 - 按钮支持长按交互，且长按时不会触发复制、剪切等默认行为。
 - 代码结构规范清晰，注释详细，便于后续维护和扩展。
+
+## 技术栈
+- 前端：HTML5, CSS3, JavaScript
+- 后端：Node.js/Python
+- 通信：MQTT, WebSocket
+- 会话管理：Express Session
+- 进程管理：PM2
+
+## 系统要求
+- Node.js 14.0+
+- npm 6.0+
+- Python 3.8+ (可选，如果使用Python后端)
+- Linux/Windows 服务器
 
 ## 文件说明
 - index.html：登录页面，用于验证用户身份
@@ -73,6 +86,161 @@ pm2 startup
 # 按提示执行相应命令
 ```
 
+## 部署步骤
+
+### 1. 环境准备
+```bash
+# 安装 Node.js 和 npm (Ubuntu/Debian)
+curl -fsSL https://deb.nodesource.com/setup_14.x | sudo -E bash -
+sudo apt-get install -y nodejs
+
+# 安装项目依赖
+npm install express body-parser mqtt cors ws path express-session
+npm install -g pm2
+
+# 如果使用Python后端，安装Python依赖
+pip install fastapi pydantic paho-mqtt uvicorn
+```
+
+### 2. 配置文件检查
+1. 确保 MQTT 配置正确：
+   ```javascript
+   const mqttOptions = {
+     username: 'emqx_u',
+     password: 'public'
+   };
+   const mqttBrokerUrl = 'mqtt://ctl_car.dxh-wds.top:1883';
+   ```
+
+2. 检查服务器端口配置：
+   ```javascript
+   server.listen(3000, ...);
+   ```
+
+### 3. 生产环境部署
+
+#### 使用 PM2 部署
+```bash
+# 安装 PM2
+npm install -g pm2
+
+# 启动服务
+pm2 start server.js --name "car-control"
+
+# 配置开机自启
+pm2 startup
+pm2 save
+
+# 查看日志
+pm2 logs car-control
+
+# 监控应用状态
+pm2 monit
+```
+
+#### 配置 Nginx 反向代理（推荐）
+```nginx
+# /etc/nginx/sites-available/car-control
+server {
+    listen 80;
+    server_name your_domain.com;
+
+    location / {
+        proxy_pass http://localhost:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+    }
+}
+```
+
+### 4. 安全配置
+
+#### 会话配置
+```javascript
+app.use(session({
+    secret: 'your-secret-key',
+    resave: false,
+    saveUninitialized: true,
+    cookie: { 
+        secure: true,  // 生产环境启用 HTTPS
+        maxAge: 1800000 // 30分钟过期
+    }
+}));
+```
+
+#### 防火墙配置
+```bash
+# Ubuntu/Debian
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+sudo ufw allow 3000/tcp
+sudo ufw allow 1883/tcp  # MQTT
+```
+
+### 5. 维护指南
+
+#### 日常维护命令
+```bash
+# 查看应用状态
+pm2 status
+
+# 重启应用
+pm2 restart car-control
+
+# 更新代码后重新加载
+pm2 reload car-control
+
+# 查看详细日志
+pm2 logs car-control --lines 100
+```
+
+#### 备份策略
+```bash
+# 备份配置文件
+cp server.js server.js.backup
+cp package.json package.json.backup
+
+# 如果使用 Git
+git add .
+git commit -m "Backup before deployment"
+git push
+```
+
+### 6. 故障排查
+
+#### 常见问题
+1. 无法连接 MQTT：
+   - 检查 MQTT 服务器状态
+   - 验证用户名密码
+   - 确认防火墙配置
+
+2. WebSocket 连接失败：
+   - 检查 Nginx 配置
+   - 确认端口开放状态
+   - 查看服务器日志
+
+3. 会话失效：
+   - 检查 session 配置
+   - 验证 cookie 设置
+   - 确认超时时间
+
+#### 日志查看
+```bash
+# PM2 日志
+pm2 logs
+
+# Nginx 日志
+sudo tail -f /var/log/nginx/error.log
+sudo tail -f /var/log/nginx/access.log
+
+# 系统日志
+sudo journalctl -u nginx
+sudo journalctl -u pm2-root
+```
+
 ## 安全说明
 - 当前使用简单的密码验证机制
 - 生产环境建议添加更完善的身份验证和会话管理
@@ -112,3 +280,42 @@ pm2 startup
 用于设置小车以指定速度运动，运动结束后系统会自动停止电机。
 
 **JSON 示例**:
+````
+
+## 开发指南
+
+### 本地开发环境设置
+```bash
+# 克隆项目
+git clone [repository_url]
+cd WebControl
+
+# 安装依赖
+npm install
+
+# 启动开发服务器
+node server.js
+```
+
+### 代码提交规范
+```bash
+git add .
+git commit -m "type: description"
+git push
+```
+
+提交类型:
+- feat: 新功能
+- fix: 修复问题
+- docs: 文档更新
+- style: 代码格式
+- refactor: 重构
+- test: 测试相关
+- chore: 构建过程或辅助工具的变动
+
+## 许可证
+MIT License
+
+## 联系方式
+作者：wds2dxh
+邮箱：wdsnpshy@163.com

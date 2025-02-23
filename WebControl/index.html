@@ -71,9 +71,9 @@
     <div class="login-container">
         <h1>群体具身智能--通用底盘</h1>
         <div class="input-group">
-            <input type="password" id="password" placeholder="请输入密码">
+            <input type="password" id="password" placeholder="请输入wds的学号" maxlength="8">
             <div class="hint" onclick="showHint()">需要提示？点击这里</div>
-            <div id="error-msg" class="error-message">密码错误，请重试</div>
+            <div id="error-msg" class="error-message">密码错误，请输入正确的学号</div>
         </div>
         <button onclick="verifyPassword()">登录</button>
     </div>
@@ -83,18 +83,40 @@
             const password = document.getElementById('password').value;
             const errorMsg = document.getElementById('error-msg');
             
-            if (password === '88888888') {
-                window.location.href = '/control';  // 修改这里，去掉 .html 后缀
-            } else {
+            const data = { password: password };
+            console.log('Sending login request:', data); // 添加日志
+
+            fetch('/login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(data)
+            })
+            .then(response => {
+                console.log('Login response status:', response.status); // 添加日志
+                return response.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    window.location.href = '/control';
+                } else {
+                    errorMsg.textContent = data.message || '密码错误，请输入正确的学号';
+                    errorMsg.style.display = 'block';
+                    setTimeout(() => {
+                        errorMsg.style.display = 'none';
+                    }, 3000);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                errorMsg.textContent = '登录失败，请重试';
                 errorMsg.style.display = 'block';
-                setTimeout(() => {
-                    errorMsg.style.display = 'none';
-                }, 3000);
-            }
+            });
         }
 
         function showHint() {
-            alert('提示：邬东升的学号');
+            alert('提示：邬东升的学号：88888888');
         }
 
         document.getElementById('password').addEventListener('keypress', function(e) {

@@ -12,12 +12,38 @@ const cors = require('cors');  // 引入 cors
 const WebSocket = require('ws');
 const http = require('http');
 const path = require('path');
+const session = require('express-session');  // 添加 session 支持
 
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
-// 修改路由配置
+// 中间件顺序很重要，需要先设置这些中间件
+app.use(cors()); // 使用 cors 中间件
+app.use(bodyParser.json()); // 解析 JSON 请求体
+app.use(bodyParser.urlencoded({ extended: true })); // 解析 URL 编码的请求体
+
+// 添加 session 配置
+app.use(session({
+    secret: 'universal-chassis-secret',
+    resave: false,
+    saveUninitialized: true,
+    cookie: { 
+        secure: false,  // 如果使用 HTTPS 则设为 true
+        maxAge: 600000 // 30分钟过期
+    }
+}));
+
+// 验证中间件
+function requireAuth(req, res, next) {
+    if (req.session.authenticated) {
+        next();
+    } else {
+        res.redirect('/');
+    }
+}
+
+// 静态文件服务应该在所有中间件之后
 app.use(express.static(__dirname));
 
 // 登录页面路由
@@ -25,8 +51,26 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// 控制页面路由
-app.get('/control', (req, res) => {
+// 登录验证接口
+app.post('/login', (req, res) => {
+    console.log('Login attempt:', req.body); // 添加日志
+    const { password } = req.body;
+    
+    // 修改这里，添加正确的密码验证
+    if (password === '88888888') {  // 修改为正确的学号
+        req.session.authenticated = true;
+        req.session.loginTime = new Date();
+        res.json({ success: true });
+    } else {
+        res.status(401).json({ 
+            success: false, 
+            message: '密码错误，请输入正确的学号'
+        });
+    }
+});
+
+// 控制页面路由，添加验证
+app.get('/control', requireAuth, (req, res) => {
     res.sendFile(path.join(__dirname, 'control.html'));
 });
 
@@ -40,7 +84,7 @@ const mqttOptions = {
   username: 'emqx_u',
   password: 'public'
 };
-const mqttBrokerUrl = 'mqtt://47.108.223.146:1883';
+const mqttBrokerUrl = 'mqtt://ctl_car.dxh-wds.top:1883';
 const client = mqtt.connect(mqttBrokerUrl, mqttOptions);
 
 // 存储所有活动的 WebSocket 连接
@@ -79,11 +123,8 @@ wss.on('connection', (ws) => {
   ws.on('close', () => clients.delete(ws));
 });
 
-app.use(cors()); // 使用 cors 中间件
-app.use(bodyParser.json());
-
 // 接口：接收动作请求，并发布 MQTT 控制命令
-app.post('/control/:action', (req, res) => {
+app.post('/control/:action', requireAuth, (req, res) => {
   const action = req.params.action;  // forward, backward, left, right, stop
   const { speed, omega, acceleration } = req.body;  // 前端进度条设置的参数
   let payload;
