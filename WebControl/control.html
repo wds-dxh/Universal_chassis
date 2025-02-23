@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Universal_chassis mqtt控制</title>
+    <style>
+        /* 全局样式 */
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+            background-color: #E8F0FE; /* 浅蓝色背景 */
+            color: #333;
+            -webkit-user-select: none;  /* 禁止用户选中文字 */
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+        }
+        /* 新增顶部标题样式 */
+        #header-title {
+            text-align: center;
+            padding: 15px;
+            font-size: 24px;
+            background-color: #4285F4;
+            color: white;
+            border-radius: 0 0 8px 8px;
+        }
+        /* 新增小车状态显示区域 */
+        #car-status {
+            text-align: center;
+            margin: 40px 20px; /* 向下移动 */
+        }
+        #car-image {
+            width: 200px;
+            height: 100px;
+            background-color: #4285F4;
+            margin: 0 auto;
+            position: relative;
+            border-radius: 10px;
+        }
+        .wheel {
+            width: 30px;
+            height: 30px;
+            background-color: #333;
+            border-radius: 50%;
+            position: absolute;
+        }
+        #wheel-front-left {
+            top: -15px;
+            left: 20px;
+        }
+        #wheel-front-right {
+            top: -15px;
+            right: 20px;
+        }
+        #wheel-back-left {
+            bottom: -15px;
+            left: 20px;
+        }
+        #wheel-back-right {
+            bottom: -15px;
+            right: 20px;
+        }
+        .wheel-speed {
+            position: absolute;
+            width: 70px;  /* 增加宽度 */
+            text-align: center;
+            color: white;
+            font-size: 18px;  /* 增大字体 */
+            font-weight: bold;  /* 加粗 */
+            background-color: rgba(0, 0, 0, 0.5);  /* 添加半透明背景 */
+            border-radius: 4px;
+            padding: 2px 0;
+        }
+        #speed-front-left {
+            top: -30px;
+            left: 5px;
+        }
+        #speed-front-right {
+            top: -30px;
+            right: 5px;
+        }
+        #speed-back-left {
+            bottom: -30px;
+            left: 5px;
+        }
+        #speed-back-right {
+            bottom: -30px;
+            right: 5px;
+        }
+        /* 控制面板容器，定位在页面底部 */
+        #control-panel {
+            position: fixed;
+            bottom: 50px;  /* 从0改为50px，使按钮组向上移动 */
+            width: 100%;
+            height: 40vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        /* 菱形容器，设定相对尺寸，可适配手机屏幕 */
+        .diamond-container {
+            position: relative;
+            width: 260px; /* 由200px改为260px */
+            height: 260px; /* 由200px改为260px */
+        }
+        /* 所有按钮的基本样式 */
+        .control-btn {
+            position: absolute;
+            width: 70px;  /* 由90px改为70px */
+            height: 70px; /* 由90px改为70px */
+            border-radius: 50%;
+            border: none;
+            background-color: #4285F4;
+            color: white;
+            font-size: 16px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            /* 增加平滑过渡 */
+            transition: all 0.2s ease;
+        }
+        /* 按钮按下效果 */
+        .control-btn:active {
+            box-shadow: none;
+        }
+        /* 按钮位置定位
+           前进、左转、停止、右转、后退分别定位于菱形各个位置 */
+        #btn-forward {
+            top: 0;
+            left: 50%;
+            transform: translate(-50%, 0);
+        }
+        #btn-left {
+            top: 50%;
+            left: 0;
+            transform: translate(0, -50%);
+        }
+        #btn-stop {
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: #ea4335; /* 停止按钮使用红色 */
+        }
+        #btn-right {
+            top: 50%;
+            right: 0;
+            transform: translate(0, -50%);
+        }
+        #btn-backward {
+            bottom: 0;
+            left: 50%;
+            transform: translate(-50%, 0);
+        }
+        /* 新增控件区域样式 */
+        #control-settings {
+            text-align: center;
+            margin: 15px;
+            padding: 15px;
+            background-color: #fff;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+        /* 新增控件内元素样式 */
+        #control-settings label {
+            margin-right: 15px;
+            font-size: 20px;  /* 增大字体 */
+            font-weight: bold;
+        }
+        #control-settings input {
+            vertical-align: middle;
+            margin-right: 20px;
+            width: 200px;  /* 加宽滑块 */
+            height: 20px;  /* 加高滑块 */
+        }
+    </style>
+</head>
+<body>
+    <!-- 新增顶部标题 -->
+    <div id="header-title">Universal_chassis mqtt控制</div>
+    <!-- 新增小车状态显示区域 -->
+    <div id="car-status">
+        <div id="car-image">
+            <div class="wheel" id="wheel-front-left"></div>
+            <div class="wheel" id="wheel-front-right"></div>
+            <div class="wheel" id="wheel-back-left"></div>
+            <div class="wheel" id="wheel-back-right"></div>
+            <div class="wheel-speed" id="speed-front-left">0</div>
+            <div class="wheel-speed" id="speed-front-right">0</div>
+            <div class="wheel-speed" id="speed-back-left">0</div>
+            <div class="wheel-speed" id="speed-back-right">0</div>
+        </div>
+    </div>
+    <!-- 新增中下部分控件：设置速度和加速度 -->
+    <div id="control-settings">
+        <label for="speed-slider">设置速度 (m/s):</label>
+        <input type="range" id="speed-slider" min="0" max="20" value="0">
+        <label id="speed-value">0</label>
+        <br>
+        <label for="acceleration-slider">设置加速度:</label>
+        <input type="range" id="acceleration-slider" min="0" max="100" value="0">
+        <label id="acceleration-value">0</label>
+    </div>
+
+    <!-- 控制按钮区域 -->
+    <div id="control-panel">
+        <div class="diamond-container">
+            <button id="btn-forward" class="control-btn">前进</button>
+            <button id="btn-left" class="control-btn">左转</button>
+            <button id="btn-stop" class="control-btn">停止</button>
+            <button id="btn-right" class="control-btn">右转</button>
+            <button id="btn-backward" class="control-btn">后退</button>
+        </div>
+    </div>
+
+    <script>
+        // 全局变量
+        let pressTimer;
+        const LONG_PRESS_INTERVAL = 200;
+        const API_BASE_URL = 'http://ctl_car.dxh-wds.top:3000';
+
+        // 新增 WebSocket 连接
+        const ws = new WebSocket('ws://ctl_car.dxh-wds.top:3000/ws');
+        
+        ws.onmessage = function(event) {
+            try {
+                const status = JSON.parse(event.data);
+                // 更新四个轮子的速度显示
+                if (status.wheelSpeeds && status.wheelSpeeds.length === 4) {
+                    document.getElementById('speed-front-left').textContent = status.wheelSpeeds[0];
+                    document.getElementById('speed-front-right').textContent = status.wheelSpeeds[1];
+                    document.getElementById('speed-back-left').textContent = status.wheelSpeeds[2];
+                    document.getElementById('speed-back-right').textContent = status.wheelSpeeds[3];
+                }
+            } catch (error) {
+                console.error('Error processing WebSocket message:', error);
+            }
+        };
+
+        ws.onerror = function(error) {
+            console.error('WebSocket error:', error);
+        };
+
+        // 修改 updateSpeedInfo 函数，仅在本地操作时更新
+        function updateSpeedInfo(speed) {
+            // 本地速度更新逻辑保持不变
+            // 实际速度将通过 WebSocket 更新
+        }
+
+        // 设置每个按钮的长按事件绑定
+        function addLongPressListener(btn, actionName) {
+            // 鼠标和触屏事件的统一处理
+            const startHandler = function(e) {
+                // 阻止默认行为，防止复制、剪切等动作
+                e.preventDefault();
+                // 立即执行一次操作（短按效果）
+                doAction(actionName);
+                // 设置定时器，长按后持续执行
+                pressTimer = setInterval(() => {
+                    doAction(actionName);
+                }, LONG_PRESS_INTERVAL);
+            };
+            const endHandler = function(e) {
+                // 清除计时器
+                clearInterval(pressTimer);
+            };
+            // 针对触屏设备
+            btn.addEventListener('touchstart', startHandler);
+            btn.addEventListener('touchend', endHandler);
+            btn.addEventListener('touchcancel', endHandler);
+            // 针对鼠标
+            btn.addEventListener('mousedown', startHandler);
+            btn.addEventListener('mouseup', endHandler);
+            btn.addEventListener('mouseleave', endHandler);
+        }
+
+        // 修改 doAction 函数，只发送 HTTP 请求
+        function doAction(action) {
+            const speed = document.getElementById('speed-slider').value;
+            const omega = speed;  // 使用速度滑块值作为角速度
+            const acceleration = document.getElementById('acceleration-slider').value;
+
+            fetch(`${API_BASE_URL}/control/${action}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ speed: speed, omega: omega, acceleration: acceleration })
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                console.log(`执行操作：${action}, 速度：${speed}, 角速度：${omega}, 加速度：${acceleration}`);
+                updateSpeedInfo(speed);
+            })
+            .catch(error => {
+                console.error('Error:', error);
+            });
+        }
+
+        // 按钮事件监听和控制器设置
+        document.addEventListener('DOMContentLoaded', function() {
+            addLongPressListener(document.getElementById('btn-forward'), 'forward');
+            addLongPressListener(document.getElementById('btn-backward'), 'backward');
+            addLongPressListener(document.getElementById('btn-left'), 'left');
+            addLongPressListener(document.getElementById('btn-right'), 'right');
+            addLongPressListener(document.getElementById('btn-stop'), 'stop');
+
+            // 禁用长按时的文本选中和拖动行为，确保体验不会触发复制剪贴
+            document.body.addEventListener('contextmenu', function(e) {
+                e.preventDefault();
+            });
+
+            // 新增控件事件：更新显示的数值并反映到速度信息中
+            const speedSlider = document.getElementById('speed-slider');
+            const accelerationSlider = document.getElementById('acceleration-slider');
+            const speedValueLabel = document.getElementById('speed-value');
+            const accelerationValueLabel = document.getElementById('acceleration-value');
+
+            function updateControlSettings() {
+                const speed = speedSlider.value;
+                const acceleration = accelerationSlider.value;
+                speedValueLabel.textContent = speed;
+                accelerationValueLabel.textContent = acceleration;
+                updateSpeedInfo(speed);
+            }
+
+            speedSlider.addEventListener('input', updateControlSettings);
+            accelerationSlider.addEventListener('input', updateControlSettings);
+        });
+    </script>
+</body>
+</html>
