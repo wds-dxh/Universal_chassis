@@ -133,7 +133,7 @@ app.post('/control/:action', requireAuth, (req, res) => {
     case 'forward':
       payload = {
         command: "speed",
-        vx: speed ? Number(speed) * 0.27778 : 0.5,  // km/h 到 m/s 转换（约1 km/h = 0.27778 m/s）
+        vx: speed ? Number(speed) : 0.5,  // 直接使用速度值，不再转换
         vy: 0.0,
         omega: 0.0,
         duration: 0,
@@ -143,7 +143,7 @@ app.post('/control/:action', requireAuth, (req, res) => {
     case 'backward':
       payload = {
         command: "speed",
-        vx: speed ? -Number(speed) * 0.27778 : -0.5,
+        vx: speed ? -Number(speed) : -0.5,  // 直接使用速度值，不再转换
         vy: 0.0,
         omega: 0.0,
         duration: 0,
