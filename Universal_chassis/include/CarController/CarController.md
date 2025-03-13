@@ -23,21 +23,26 @@ bool setSpeed(float vx, float vy, float omega, [float acceleration]);
 
 使用接口：  
 ```cpp
-bool moveDistance(float dx, float dy, float dtheta, [float acceleration, uint8_t subdivision]);
+// 基础版本 - 使用默认参数
+bool moveDistance(float dx, float dy, float dtheta);
+
+// 完整版本 - 自定义所有参数
+bool moveDistance(float dx, float dy, float dtheta, float acceleration, float speed, uint16_t subdivision);
 ```
 
 - **参数说明：**  
   - `dx`：X 方向位移（单位：m），正值表示前进  
   - `dy`：Y 方向位移（单位：m）  
   - `dtheta`：旋转角度（单位：rad），正值表示逆时针旋转  
-  - `acceleration`（可选）：加速度档位（默认为 `configure()` 中设定的默认值）  
-  - `subdivision`（可选）：细分数，用于判断步进电机每圈脉冲数（默认为 `configure()` 中设定的默认值）
+  - `speed`：运动速度（单位：m/s）
+  - `acceleration`：加速度档位
+  - `subdivision`：细分数，用于判断步进电机每圈脉冲数
 
-调用该接口后，CarController 会根据运动学模型计算出各电机需要的脉冲数，然后分离出旋转（方向）与脉冲幅值，调用电机的绝对位置模式接口进行运动控制。
+调用该接口后，CarController 会根据运动学模型计算出各电机需要的脉冲数，然后分离出旋转（方向）与脉冲幅值，调用电机的绝对位置模式接口进行运动控制。系统会根据指定的速度参数计算合适的电机转速，确保小车按照预期速度平稳移动。
 
 ## 3. 其他接口
 
-- `configure(const CarControllerConfig& config)` 可一次性设置默认的加速度与细分数  
+- `configure(const CarControllerConfig& config)` 可一次性设置默认的加速度、速度与细分数  
 - `getCarState()` 获取当前小车状态（包含各个轮电机的反馈转速）  
 - `stop()` 紧急停止所有电机，内部使用同步控制，确保各电机同时执行快速停止命令
 
@@ -63,5 +68,19 @@ bool moveDistance(float dx, float dy, float dtheta, [float acceleration, uint8_t
    ```
 4. **调用运动接口**：  
    使用 `setSpeed()` 实现速度控制、使用 `moveDistance()` 实现位置控制。
+
+## 位置模式使用示例
+
+### 基础用法（使用默认参数）
+```cpp
+// 向前移动1米
+carController.moveDistance(1.0, 0.0, 0.0);
+```
+
+### 高级用法（自定义所有参数）
+```cpp
+// 以0.5 m/s的速度向前移动1米，加速度为10，细分数为256
+carController.moveDistance(1.0, 0.0, 0.0, 10.0, 0.5, 256);
+```
 
 完整示例请参考 `src/main.cpp` 中的使用代码。

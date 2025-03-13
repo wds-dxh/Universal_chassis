@@ -1,37 +1,36 @@
-/*
- * @Author: wds2dxh wdsnpshy@163.com
- * @Date: 2025-02-23 23:45:03
- * @Description: 
- * Copyright (c) 2025 by ${wds2dxh}, All Rights Reserved. 
+/**
+ * @file 通用底盘控制系统服务器
+ * @description 处理HTTP请求、WebSocket连接和MQTT通信
  */
 
 const express = require('express');
 const bodyParser = require('body-parser');
 const mqtt = require('mqtt');
-const cors = require('cors');  // 引入 cors
+const cors = require('cors');
 const WebSocket = require('ws');
 const http = require('http');
 const path = require('path');
-const session = require('express-session');  // 添加 session 支持
+const session = require('express-session');
 
+// 导入配置文件
+const config = require('./config');
+
+// 创建Express应用和HTTP服务器
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
-// 中间件顺序很重要，需要先设置这些中间件
-app.use(cors()); // 使用 cors 中间件
-app.use(bodyParser.json()); // 解析 JSON 请求体
-app.use(bodyParser.urlencoded({ extended: true })); // 解析 URL 编码的请求体
+// 中间件配置
+app.use(cors());
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
 
-// 添加 session 配置
+// 会话配置
 app.use(session({
-    secret: 'universal-chassis-secret',
+    secret: config.session.secret,
     resave: false,
     saveUninitialized: true,
-    cookie: { 
-        secure: false,  // 如果使用 HTTPS 则设为 true
-        maxAge: 600000 // 30分钟过期
-    }
+    cookie: config.session.cookie
 }));
 
 // 验证中间件
@@ -43,150 +42,215 @@ function requireAuth(req, res, next) {
     }
 }
 
-// 静态文件服务应该在所有中间件之后
+// 静态文件服务
 app.use(express.static(__dirname));
 
-// 登录页面路由
+// 路由配置
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
 // 登录验证接口
 app.post('/login', (req, res) => {
-    console.log('Login attempt:', req.body); // 添加日志
-    const { password } = req.body;
+    console.log('Login attempt:', req.body);
+    const { deviceId, password } = req.body;
     
-    // 修改这里，添加正确的密码验证
-    if (password === '88888888') {  // 修改为正确的学号
+    // 验证设备ID格式
+    if (!config.auth.deviceIdPattern.test(deviceId)) {
+        return res.status(401).json({
+            success: false,
+            message: '设备编号格式不正确'
+        });
+    }
+    
+    // 验证密码
+    if (password === config.auth.password) {
         req.session.authenticated = true;
+        req.session.deviceId = deviceId;  // 保存设备ID到会话
         req.session.loginTime = new Date();
         res.json({ success: true });
     } else {
         res.status(401).json({ 
             success: false, 
-            message: '密码错误，请输入正确的学号'
+            message: '密码错误'
         });
     }
 });
 
-// 控制页面路由，添加验证
+// 控制页面路由
 app.get('/control', requireAuth, (req, res) => {
     res.sendFile(path.join(__dirname, 'control.html'));
 });
 
-// 添加通配符路由，处理其他所有请求
+// 通配符路由
 app.get('*', (req, res) => {
     res.redirect('/');
 });
 
-// MQTT 连接配置
-const mqttOptions = {
-  username: 'emqx_u',
-  password: 'public'
-};
-const mqttBrokerUrl = 'mqtt://ctl_car.dxh-wds.top:1883';
-const client = mqtt.connect(mqttBrokerUrl, mqttOptions);
+// MQTT客户端
+const mqttClient = mqtt.connect(config.mqtt.brokerUrl, config.mqtt.options);
 
-// 存储所有活动的 WebSocket 连接
-const clients = new Set();
+// 存储WebSocket连接
+const wsClients = new Set();
 
-// 订阅状态主题
-client.on('connect', () => {
-  console.log('Connected to MQTT broker');
-  client.subscribe('CarStatus', (err) => {
-    if (!err) {
-      console.log('Subscribed to CarStatus topic');
-    }
-  });
+// MQTT连接和订阅
+mqttClient.on('connect', () => {
+    console.log('Connected to MQTT broker:', config.mqtt.brokerUrl);
+    // 不需要在这里订阅任何主题，因为我们会在WebSocket连接时
+    // 根据设备ID动态订阅对应的主题
 });
 
-// 处理 MQTT 状态消息
-client.on('message', (topic, message) => {
-  if (topic === 'CarStatus') {
-    try {
-      const status = JSON.parse(message.toString());
-      // 广播状态给所有连接的 WebSocket 客户端
-      clients.forEach(client => {
-        if (client.readyState === WebSocket.OPEN) {
-          client.send(JSON.stringify(status));
+// WebSocket连接处理
+wss.on('connection', (ws, req) => {
+    // 从会话中获取设备ID
+    const deviceId = req.session?.deviceId;
+    if (!deviceId) {
+        ws.close();
+        return;
+    }
+    
+    wsClients.add(ws);
+    console.log(`New WebSocket connection for device ${deviceId}, total clients:`, wsClients.size);
+    
+    // 订阅特定设备的状态主题
+    const statusTopic = config.mqtt.topicPrefix.status + deviceId;
+    mqttClient.subscribe(statusTopic, (err) => {
+        if (!err) {
+            console.log('Subscribed to topic:', statusTopic);
+        } else {
+            console.error('Failed to subscribe:', err);
         }
-      });
+    });
+    
+    ws.deviceId = deviceId; // 保存设备ID到WebSocket连接
+    
+    ws.on('close', () => {
+        // 取消订阅该设备的主题
+        const statusTopic = config.mqtt.topicPrefix.status + deviceId;
+        mqttClient.unsubscribe(statusTopic, (err) => {
+            if (err) {
+                console.error('Failed to unsubscribe:', err);
+            }
+        });
+        
+        wsClients.delete(ws);
+        console.log('WebSocket disconnected, remaining clients:', wsClients.size);
+    });
+});
+
+// 处理MQTT消息
+mqttClient.on('message', (topic, message) => {
+    const deviceId = topic.split('_')[1]; // 从主题中提取设备ID
+    if (!deviceId) return;
+    
+    try {
+        const status = JSON.parse(message.toString());
+        // 只向对应设备的客户端发送消息
+        wsClients.forEach(client => {
+            if (client.deviceId === deviceId && client.readyState === WebSocket.OPEN) {
+                client.send(JSON.stringify(status));
+            }
+        });
     } catch (error) {
-      console.error('Error processing MQTT message:', error);
+        console.error('Error processing MQTT message:', error);
     }
-  }
 });
 
-// WebSocket 连接处理
-wss.on('connection', (ws) => {
-  clients.add(ws);
-  ws.on('close', () => clients.delete(ws));
-});
-
-// 接口：接收动作请求，并发布 MQTT 控制命令
+// 控制接口 - 修复路由冲突问题
 app.post('/control/:action', requireAuth, (req, res) => {
-  const action = req.params.action;  // forward, backward, left, right, stop
-  const { speed, omega, acceleration } = req.body;  // 前端进度条设置的参数
-  let payload;
+    const action = req.params.action;
+    const deviceId = req.session.deviceId;
+    const { speed, omega, acceleration } = req.body;
+    let payload;
 
-  switch(action) {
-    case 'forward':
-      payload = {
-        command: "speed",
-        vx: speed ? Number(speed) : 0.5,  // 直接使用速度值，不再转换
-        vy: 0.0,
-        omega: 0.0,
-        duration: 0,
-        acceleration: acceleration ? Number(acceleration) : 10.0
-      };
-      break;
-    case 'backward':
-      payload = {
-        command: "speed",
-        vx: speed ? -Number(speed) : -0.5,  // 直接使用速度值，不再转换
-        vy: 0.0,
-        omega: 0.0,
-        duration: 0,
-        acceleration: acceleration ? Number(acceleration) : 10.0
-      };
-      break;
-    case 'left':
-      payload = {
-        command: "speed",
-        vx: 0.0,
-        vy: 0.0,
-        omega: omega ? Number(omega) : 0.1,  // 左转（逆时针）
-        duration: 0,
-        acceleration: acceleration ? Number(acceleration) : 10.0
-      };
-      break;
-    case 'right':
-      payload = {
-        command: "speed",
-        vx: 0.0,
-        vy: 0.0,
-        omega: omega ? -Number(omega) : -0.1,  // 右转（顺时针）
-        duration: 0,
-        acceleration: acceleration ? Number(acceleration) : 10.0
-      };
-      break;
-    case 'stop':
-      payload = { command: "stop" };
-      break;
-    default:
-      return res.status(400).send("Invalid action");
-  }
-
-  // 发布命令至 MQTT 主题 CarControl
-  client.publish('CarControl', JSON.stringify(payload), (err) => {
-    if (err) {
-      return res.status(500).send("MQTT publish error");
+    // 根据控制协议构建命令
+    switch(action) {
+        case 'forward':
+            payload = {
+                command: "speed",
+                vx: speed ? Number(speed) : config.defaults.speed,
+                vy: 0.0,
+                omega: 0.0,
+                acceleration: acceleration ? Number(acceleration) : config.defaults.acceleration
+            };
+            break;
+        case 'backward':
+            payload = {
+                command: "speed",
+                vx: speed ? -Number(speed) : -config.defaults.speed,
+                vy: 0.0,
+                omega: 0.0,
+                acceleration: acceleration ? Number(acceleration) : config.defaults.acceleration
+            };
+            break;
+        case 'left':
+            payload = {
+                command: "speed",
+                vx: 0.0,
+                vy: 0.0,
+                omega: omega ? Number(omega) : config.defaults.omega,
+                acceleration: acceleration ? Number(acceleration) : config.defaults.acceleration
+            };
+            break;
+        case 'right':
+            payload = {
+                command: "speed",
+                vx: 0.0,
+                vy: 0.0,
+                omega: omega ? -Number(omega) : -config.defaults.omega,
+                acceleration: acceleration ? Number(acceleration) : config.defaults.acceleration
+            };
+            break;
+        case 'stop':
+            payload = { command: "stop" };
+            break;
+        case 'move':
+            // 处理摇杆控制命令
+            payload = {
+                command: "speed",
+                vx: speed !== undefined ? Number(speed) : 0,
+                vy: 0.0,
+                omega: omega !== undefined ? Number(omega) : 0,
+                acceleration: acceleration ? Number(acceleration) : config.defaults.acceleration
+            };
+            break;
+        default:
+            return res.status(400).json({ error: "Invalid action" });
     }
-    res.send("Command sent");
-  });
+
+    // 发布到特定设备的控制主题
+    const controlTopic = config.mqtt.topicPrefix.control + deviceId;
+    mqttClient.publish(controlTopic, JSON.stringify(payload), (err) => {
+        if (err) {
+            console.error('MQTT publish error:', err);
+            return res.status(500).json({ error: "Failed to send command" });
+        }
+        console.log('Command sent:', action, payload);
+        res.json({ success: true, message: "Command sent" });
+    });
 });
 
-server.listen(3000, () => {
-  console.log('Server running on port 3000');
-  console.log('Visit http://localhost:3000 to access the control panel');
+// 配置接口 - 提供前端所需的配置信息
+app.get('/config', requireAuth, (req, res) => {
+    // 只返回前端需要的配置信息
+    const clientConfig = {
+        video: config.video
+    };
+    
+    res.json(clientConfig);
+});
+
+// 启动服务器
+server.listen(config.server.port, () => {
+    console.log(`Server running on http://${config.server.host}:${config.server.port}`);
+    console.log('Visit http://localhost:' + config.server.port + ' to access the control panel');
+});
+
+// 错误处理
+mqttClient.on('error', (err) => {
+    console.error('MQTT client error:', err);
+});
+
+process.on('uncaughtException', (err) => {
+    console.error('Uncaught exception:', err);
 });

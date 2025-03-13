@@ -84,43 +84,60 @@ bool CarController::setSpeed(float vx, float vy, float omega, float acceleration
 }
 
 // 位置模式控制（使用默认控制参数）
-bool CarController::moveDistance(float dx, float dy, float dtheta) {//打印配置参数
-    return moveDistance(dx, dy, dtheta, defaultConfig.defaultAcceleration, defaultConfig.defaultSubdivision);
-    
+bool CarController::moveDistance(float dx, float dy, float dtheta) {
+    return moveDistance(dx, dy, dtheta, defaultConfig.defaultAcceleration, defaultConfig.defaultSpeed, defaultConfig.defaultSubdivision);
 }
 
-// 位置模式控制（自定义加速度和细分数）  
-// 通过运动学模型计算各电机需要旋转的脉冲数，然后调用位置模式接口控制电机运动
-bool CarController::moveDistance(float dx, float dy, float dtheta, float acceleration, uint16_t subdivision) {
+// 位置模式控制（完整参数版本）  
+bool CarController::moveDistance(float dx, float dy, float dtheta, float acceleration, float speed, uint16_t subdivision) {
     std::array<int32_t, 4> pulseCommands;
     kinematics->calculatePositionCommands(dx, dy, dtheta, pulseCommands, subdivision);
     
+    // 计算合适的速度
+    std::array<int16_t, 4> speedCommands;
+    // 使用dx的方向计算速度
+    float vx = (dx != 0) ? (dx > 0 ? speed : -speed) : 0;
+    float vy = (dy != 0) ? (dy > 0 ? speed : -speed) : 0;
+    float omega = (dtheta != 0) ? (dtheta > 0 ? 0.5 : -0.5) : 0;
+    
+    kinematics->calculateSpeedCommands(vx, vy, omega, reinterpret_cast<std::array<uint16_t, 4>&>(speedCommands));
+    
+    // 找出最大速度值作为基准
+    uint16_t maxSpeed = 0;
+    for (auto cmd : speedCommands) {
+        uint16_t absSpeed = std::abs(cmd);
+        if (absSpeed > maxSpeed) {
+            maxSpeed = absSpeed;
+        }
+    }
+    
+    // 如果计算出的速度为0，使用默认速度
+    uint16_t speedRpm = (maxSpeed > 0) ? maxSpeed : 100;
+    
     bool success = true;    
-    // 采用一个固定的速度参数（例如 100 RPM）用于位置模式下的运动
-    uint16_t defaultSpeedRpm = 100;
     
     int32_t pulses = pulseCommands[0];
-    uint8_t dirRF = (pulses >= 0) ? 1 : 0;
+    uint8_t dirRF = (pulses >= 0) ? 1 : 0;  // 正方向为1，负方向为0
     uint32_t absPulsesRF = static_cast<uint32_t>(std::abs(pulses));
-    if (!motorRF->setPositionMode(dirRF, defaultSpeedRpm, static_cast<uint8_t>(acceleration), absPulsesRF, false, false))
+    if (!motorRF->setPositionMode(dirRF, speedRpm, static_cast<uint8_t>(acceleration), absPulsesRF, false, false))
         success = false;
     
     pulses = pulseCommands[1];
     uint8_t dirRR = (pulses >= 0) ? 1 : 0;
     uint32_t absPulsesRR = static_cast<uint32_t>(std::abs(pulses));
-    if (!motorRR->setPositionMode(dirRR, defaultSpeedRpm, static_cast<uint8_t>(acceleration), absPulsesRR, false, false))
+    if (!motorRR->setPositionMode(dirRR, speedRpm, static_cast<uint8_t>(acceleration), absPulsesRR, false, false))
         success = false;
     
     pulses = pulseCommands[2];
     uint8_t dirLR = (pulses >= 0) ? 1 : 0;
     uint32_t absPulsesLR = static_cast<uint32_t>(std::abs(pulses));
-    if (!motorLR->setPositionMode(dirLR, defaultSpeedRpm, static_cast<uint8_t>(acceleration), absPulsesLR, false, false))
+    if (!motorLR->setPositionMode(dirLR, speedRpm, static_cast<uint8_t>(acceleration), absPulsesLR, false, false))
         success = false;
     
     pulses = pulseCommands[3];
     uint8_t dirLF = (pulses >= 0) ? 1 : 0;
     uint32_t absPulsesLF = static_cast<uint32_t>(std::abs(pulses));
-    if (!motorLF->setPositionMode(dirLF, defaultSpeedRpm, static_cast<uint8_t>(acceleration), absPulsesLF, false, false))
+    if (!motorLF->setPositionMode(dirLF, speedRpm, static_cast<uint8_t>(acceleration), absPulsesLF, false, false))
         success = false;
     
     // 触发多机同步运动

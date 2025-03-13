@@ -5,6 +5,8 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>群体具身智能--通用底盘</title>
+    <!-- 引入 nipplejs 库 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/nipplejs/0.10.1/nipplejs.min.js"></script>
     <style>
         /* 全局样式 */
         body {
@@ -17,8 +19,9 @@
             -moz-user-select: none;
             -ms-user-select: none;
             user-select: none;
+            touch-action: none; /* 防止浏览器默认触摸行为 */
         }
-        /* 新增顶部标题样式 */
+        /* 顶部标题样式 */
         #header-title {
             text-align: center;
             padding: 15px;
@@ -26,332 +29,493 @@
             background-color: #4285F4;
             color: white;
             border-radius: 0 0 6px 6px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 10px;
         }
-        /* 新增小车状态显示区域 */
-        #car-status {
-            text-align: center;
-            margin: 40px 20px 20px 20px; /* 增加顶部边距到40px */
-        }
-        #car-image {
-            width: 160px;  /* 减小宽度 */
-            height: 80px;  /* 减小高度 */
-            background-color: #4285F4;
-            margin: 0 auto;
-            position: relative;
-            border-radius: 8px;
-        }
-        .wheel {
-            width: 24px;  /* 减小轮子尺寸 */
-            height: 24px;
-            background-color: #333;
-            border-radius: 50%;
-            position: absolute;
-        }
-        #wheel-front-left {
-            top: -12px;  /* 调整位置 */
-            left: 16px;
-        }
-        #wheel-front-right {
-            top: -12px;
-            right: 16px;
-        }
-        #wheel-back-left {
-            bottom: -12px;
-            left: 16px;
-        }
-        #wheel-back-right {
-            bottom: -12px;
-            right: 16px;
-        }
-        .wheel-speed {
-            position: absolute;
-            width: 60px;
-            text-align: center;
-            color: white;
-            font-size: 16px;  /* 稍微减小字体 */
-            font-weight: bold;  /* 加粗 */
-            background-color: rgba(0, 0, 0, 0.5);  /* 添加半透明背景 */
-            border-radius: 4px;
-            padding: 1px 0;
-        }
-        #speed-front-left {
-            top: -30px;
-            left: 5px;
-        }
-        #speed-front-right {
-            top: -30px;
-            right: 5px;
-        }
-        #speed-back-left {
-            bottom: -30px;
-            left: 5px;
-        }
-        #speed-back-right {
-            bottom: -30px;
-            right: 5px;
-        }
-        /* 控制面板容器，定位在页面底部 */
-        #control-panel {
-            position: fixed;
-            bottom: 20px;  /* 调整底部距离 */
+        /* 视频流容器 */
+        #video-container {
             width: 100%;
-            height: 35vh;  /* 稍微减小高度 */
+            max-width: 640px;
+            margin: 0 auto 15px auto;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            background-color: #000;
+            position: relative;
+        }
+        
+        #video-stream {
+            width: 100%;
+            display: block;
+        }
+        
+        #video-fallback {
+            width: 100%;
+            height: 240px;
             display: flex;
             justify-content: center;
             align-items: center;
-        }
-        /* 菱形容器，设定相对尺寸，可适配手机屏幕 */
-        .diamond-container {
-            position: relative;
-            width: 260px; /* 由200px改为260px */
-            height: 260px; /* 由200px改为260px */
-        }
-        /* 所有按钮的基本样式 */
-        .control-btn {
-            position: absolute;
-            width: 70px;  /* 由90px改为70px */
-            height: 70px; /* 由90px改为70px */
-            border-radius: 50%;
-            border: none;
-            background-color: #4285F4;
+            background-color: #333;
             color: white;
             font-size: 16px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            /* 增加平滑过渡 */
-            transition: all 0.2s ease;
         }
-        /* 按钮按下效果 */
-        .control-btn:active {
-            box-shadow: none;
-        }
-        /* 按钮位置定位
-           前进、左转、停止、右转、后退分别定位于菱形各个位置 */
-        #btn-forward {
-            top: 0;
-            left: 50%;
-            transform: translate(-50%, 0);
-        }
-        #btn-left {
-            top: 50%;
-            left: 0;
-            transform: translate(0, -50%);
-        }
-        #btn-stop {
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background-color: #ea4335; /* 停止按钮使用红色 */
-        }
-        #btn-right {
-            top: 50%;
-            right: 0;
-            transform: translate(0, -50%);
-        }
-        #btn-backward {
-            bottom: 0;
-            left: 50%;
-            transform: translate(-50%, 0);
-        }
-        /* 新增控件区域样式 */
-        #control-settings {
+        
+        /* 状态显示区域 */
+        #status-display {
             text-align: center;
-            margin: 50px 15px 10px 15px;  /* 增加顶部边距到50px */
-            padding: 12px;
-            background-color: #fff;
-            border: 1px solid #ddd;
+            margin: 10px 15px;
+            padding: 10px;
+            background-color: rgba(255, 255, 255, 0.8);
             border-radius: 8px;
-            position: relative;
-            top: -10px;  /* 向上移动 */
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
         }
-        /* 新增控件内元素样式 */
-        #control-settings label {
-            margin-right: 15px;
-            font-size: 20px;  /* 增大字体 */
+        .status-value {
+            display: inline-block;
+            margin: 0 10px;
             font-weight: bold;
         }
-        #control-settings input {
-            vertical-align: middle;
-            margin-right: 20px;
-            width: 200px;  /* 加宽滑块 */
-            height: 20px;  /* 加高滑块 */
+        
+        /* 改进的滑块控件样式 */
+        #control-settings {
+            text-align: center;
+            margin: 15px auto;
+            padding: 15px;
+            background-color: #fff;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            max-width: 90%;
+            width: 500px;
         }
+        
+        .slider-container {
+            margin: 12px 0;
+            position: relative;
+        }
+        
+        .slider-container label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+            color: #4285F4;
+        }
+        
+        .slider-container input[type="range"] {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 8px;
+            border-radius: 4px;
+            background: #e0e0e0;
+            outline: none;
+            margin: 10px 0;
+        }
+        
+        .slider-container input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: #4285F4;
+            cursor: pointer;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+        }
+        
+        .slider-container input[type="range"]::-moz-range-thumb {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: #4285F4;
+            cursor: pointer;
+            border: none;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+        }
+        
+        .slider-value {
+            position: absolute;
+            right: 0;
+            top: 0;
+            background-color: #4285F4;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-weight: bold;
+            min-width: 30px;
+        }
+        
+        /* 摇杆控制区域 */
+        #joystick-container {
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            margin: 20px 0;
+            height: 35vh;
+        }
+        
+        .joystick-group {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        .joystick-zone {
+            width: 150px;
+            height: 150px;
+            position: relative;
+            background-color: rgba(66, 133, 244, 0.1);
+            border-radius: 50%;
+            border: 2px solid #4285F4;
+        }
+        
+        .joystick-label {
+            text-align: center;
+            margin-top: 10px;
+            font-weight: bold;
+            color: #4285F4;
+        }
+        
         /* 响应式布局调整 */
-        @media screen and (max-height: 600px) {
-            #car-status {
-                margin: 30px 20px 10px 20px;  /* 小屏幕时适当减小边距 */
+        @media screen and (max-height: 700px) {
+            #joystick-container {
+                height: 35vh;
             }
-            
-            #control-settings {
-                margin: 40px 15px 5px 15px;  /* 小屏幕时适当减小边距 */
-                padding: 8px;
-            }
-            
-            #control-settings label {
-                font-size: 16px;
-            }
-            
-            .diamond-container {
-                width: 220px;  /* 在小屏幕上减小按钮组大小 */
-                height: 220px;
-            }
-            
-            .control-btn {
-                width: 60px;
-                height: 60px;
-                font-size: 14px;
+            .joystick-zone {
+                width: 120px;
+                height: 120px;
             }
         }
-
-        /* 超小屏幕适配 */
-        @media screen and (max-height: 480px) {
-            #car-image {
-                width: 140px;
-                height: 70px;
+        
+        @media screen and (max-width: 480px) {
+            #control-settings {
+                padding: 10px;
             }
-            
-            .diamond-container {
-                width: 200px;
-                height: 200px;
+            .joystick-zone {
+                width: 120px;
+                height: 120px;
             }
-            
-            .control-btn {
-                width: 50px;
-                height: 50px;
-                font-size: 12px;
+            #header-title {
+                font-size: 20px;
+                padding: 10px;
             }
         }
     </style>
 </head>
 <body>
-    <!-- 新增顶部标题 -->
+    <!-- 顶部标题 -->
     <div id="header-title">群体具身智能--通用底盘</div>
-    <!-- 新增小车状态显示区域 -->
-    <div id="car-status">
-        <div id="car-image">
-            <div class="wheel" id="wheel-front-left"></div>
-            <div class="wheel" id="wheel-front-right"></div>
-            <div class="wheel" id="wheel-back-left"></div>
-            <div class="wheel" id="wheel-back-right"></div>
-            <div class="wheel-speed" id="speed-front-left">0</div>
-            <div class="wheel-speed" id="speed-front-right">0</div>
-            <div class="wheel-speed" id="speed-back-left">0</div>
-            <div class="wheel-speed" id="speed-back-right">0</div>
+    
+    <!-- 视频流区域 -->
+    <div id="video-container">
+        <img id="video-stream" src="" alt="视频流" onerror="this.style.display='none';document.getElementById('video-fallback').style.display='flex';">
+        <div id="video-fallback" style="display:none;">视频流不可用</div>
+    </div>
+    
+    <!-- 状态显示区域 -->
+    <div id="status-display">
+        <div class="status-value">线速度: <span id="current-vx">0.00</span> m/s</div>
+        <div class="status-value">角速度: <span id="current-omega">0.00</span> rad/s</div>
+    </div>
+    
+    <!-- 控制设置区域 -->
+    <div id="control-settings">
+        <div class="slider-container">
+            <label for="max-speed-slider">最大速度 (m/s)</label>
+            <span class="slider-value" id="max-speed-value">0.5</span>
+            <input type="range" id="max-speed-slider" min="0" max="2" step="0.1" value="0.5">
+        </div>
+        <div class="slider-container">
+            <label for="max-omega-slider">最大角速度 (rad/s)</label>
+            <span class="slider-value" id="max-omega-value">0.5</span>
+            <input type="range" id="max-omega-slider" min="0" max="1" step="0.1" value="0.5">
+        </div>
+        <div class="slider-container">
+            <label for="acceleration-slider">加速度</label>
+            <span class="slider-value" id="acceleration-value">10</span>
+            <input type="range" id="acceleration-slider" min="0" max="256" step="1" value="10">
         </div>
     </div>
-    <!-- 新增中下部分控件：设置速度和加速度 -->
-    <div id="control-settings">
-        <label for="speed-slider">设置速度 (m/s):</label>
-        <input type="range" id="speed-slider" min="0" max="20" value="0">
-        <label id="speed-value">0</label>
-        <br>
-        <label for="acceleration-slider">设置加速度:</label>
-        <input type="range" id="acceleration-slider" min="0" max="100" value="0">
-        <label id="acceleration-value">0</label>
-    </div>
-
-    <!-- 控制按钮区域 -->
-    <div id="control-panel">
-        <div class="diamond-container">
-            <button id="btn-forward" class="control-btn">前进</button>
-            <button id="btn-left" class="control-btn">左转</button>
-            <button id="btn-stop" class="control-btn">停止</button>
-            <button id="btn-right" class="control-btn">右转</button>
-            <button id="btn-backward" class="control-btn">后退</button>
+    
+    <!-- 摇杆控制区域 -->
+    <div id="joystick-container">
+        <div class="joystick-group">
+            <div id="left-joystick" class="joystick-zone"></div>
+            <div class="joystick-label">线速度控制</div>
+        </div>
+        
+        <div class="joystick-group">
+            <div id="right-joystick" class="joystick-zone"></div>
+            <div class="joystick-label">角速度控制</div>
         </div>
     </div>
 
     <script>
-        // 全局变量
-        let pressTimer;
-        const LONG_PRESS_INTERVAL = 200;
-        const API_BASE_URL = 'http://ctl_car.dxh-wds.top:3000';
-
-        // 新增 WebSocket 连接
-        const ws = new WebSocket('ws://ctl_car.dxh-wds.top:3000/ws');
+        // 配置参数
+        const CONFIG = {
+            apiBaseUrl: window.location.origin,
+            wsUrl: `ws://${window.location.host}/ws`,
+            commandDebounceTime: 50  // 命令发送防抖时间(毫秒)
+        };
+        
+        // DOM元素
+        const videoStream = document.getElementById('video-stream');
+        const videoFallback = document.getElementById('video-fallback');
+        const currentVxDisplay = document.getElementById('current-vx');
+        const currentOmegaDisplay = document.getElementById('current-omega');
+        const maxSpeedSlider = document.getElementById('max-speed-slider');
+        const maxOmegaSlider = document.getElementById('max-omega-slider');
+        const accelerationSlider = document.getElementById('acceleration-slider');
+        const maxSpeedValue = document.getElementById('max-speed-value');
+        const maxOmegaValue = document.getElementById('max-omega-value');
+        const accelerationValue = document.getElementById('acceleration-value');
+        
+        // 控制变量
+        let maxSpeed = 0.5;  // 最大线速度 (m/s)
+        let maxOmega = 0.5;  // 最大角速度 (rad/s)
+        let acceleration = 10;  // 加速度
+        let currentVx = 0;  // 当前线速度
+        let currentOmega = 0;  // 当前角速度
+        let lastCommandTime = 0;  // 上次发送命令的时间
+        let commandTimer = null;  // 命令发送定时器
+        
+        // 加载视频流
+        fetch(`${CONFIG.apiBaseUrl}/config`)
+            .then(response => response.json())
+            .then(config => {
+                if (config.video && config.video.enabled) {
+                    videoStream.src = config.video.url;
+                    videoStream.onerror = function() {
+                        this.style.display = 'none';
+                        videoFallback.style.display = 'flex';
+                        if (config.video.fallbackImage) {
+                            videoFallback.style.backgroundImage = `url(${config.video.fallbackImage})`;
+                            videoFallback.style.backgroundSize = 'cover';
+                            videoFallback.style.backgroundPosition = 'center';
+                        }
+                    };
+                } else {
+                    videoStream.style.display = 'none';
+                    videoFallback.style.display = 'flex';
+                    videoFallback.textContent = '视频流已禁用';
+                }
+            })
+            .catch(error => {
+                console.error('加载配置失败:', error);
+                videoStream.style.display = 'none';
+                videoFallback.style.display = 'flex';
+                videoFallback.textContent = '无法加载视频流配置';
+            });
+        
+        // WebSocket连接
+        let ws = new WebSocket(CONFIG.wsUrl);
+        
+        ws.onopen = function() {
+            console.log('WebSocket连接已建立');
+        };
         
         ws.onmessage = function(event) {
             try {
                 const status = JSON.parse(event.data);
-                // 更新四个轮子的速度显示
-                if (status.wheelSpeeds && status.wheelSpeeds.length === 4) {
-                    document.getElementById('speed-front-left').textContent = status.wheelSpeeds[0];
-                    document.getElementById('speed-front-right').textContent = status.wheelSpeeds[1];
-                    document.getElementById('speed-back-left').textContent = status.wheelSpeeds[2];
-                    document.getElementById('speed-back-right').textContent = status.wheelSpeeds[3];
-                }
+                // 可以在这里处理其他状态信息
             } catch (error) {
-                console.error('Error processing WebSocket message:', error);
+                console.error('处理WebSocket消息时出错:', error);
             }
         };
-
+        
         ws.onerror = function(error) {
-            console.error('WebSocket error:', error);
+            console.error('WebSocket错误:', error);
         };
-
-        // 修改 updateSpeedInfo 函数，仅在本地操作时更新
-        function updateSpeedInfo(speed) {
-            // 本地速度更新逻辑保持不变
-            // 实际速度将通过 WebSocket 更新
-        }
-
-        // 设置每个按钮的长按事件绑定
-        function addLongPressListener(btn, actionName) {
-            // 鼠标和触屏事件的统一处理
-            const startHandler = function(e) {
-                // 阻止默认行为，防止复制、剪切等动作
+        
+        ws.onclose = function() {
+            console.log('WebSocket连接已关闭，尝试重新连接...');
+            setTimeout(() => {
+                ws = new WebSocket(CONFIG.wsUrl);
+            }, 3000);
+        };
+        
+        // 创建左侧摇杆 - 控制线速度
+        const leftJoystickOptions = {
+            zone: document.getElementById('left-joystick'),
+            mode: 'static',
+            position: { left: '50%', top: '50%' },
+            size: 120,
+            color: '#4285F4',
+            lockY: false,  // 只允许垂直方向移动
+            restOpacity: 0.8
+        };
+        
+        // 创建右侧摇杆 - 控制角速度
+        const rightJoystickOptions = {
+            zone: document.getElementById('right-joystick'),
+            mode: 'static',
+            position: { left: '50%', top: '50%' },
+            size: 120,
+            color: '#4285F4',
+            lockX: false,  // 只允许水平方向移动
+            restOpacity: 0.8
+        };
+        
+        // 初始化摇杆
+        let leftJoystick, rightJoystick;
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            leftJoystick = nipplejs.create(leftJoystickOptions);
+            rightJoystick = nipplejs.create(rightJoystickOptions);
+            
+            // 左摇杆事件 - 控制线速度
+            leftJoystick.on('move', function(evt, data) {
+                if (data.direction && data.direction.y) {
+                    // 计算线速度 - 上为正，下为负
+                    const speedRatio = Math.min(data.distance / 60, 1);  // 60是摇杆半径
+                    if (data.direction.y === 'up') {
+                        currentVx = speedRatio * maxSpeed;
+                    } else if (data.direction.y === 'down') {
+                        currentVx = -speedRatio * maxSpeed;
+                    }
+                    currentVxDisplay.textContent = currentVx.toFixed(2);
+                    sendControlCommand();
+                }
+            });
+            
+            leftJoystick.on('end', function() {
+                currentVx = 0;
+                currentVxDisplay.textContent = "0.00";
+                if (currentOmega === 0) {
+                    sendStopCommand();
+                } else {
+                    sendControlCommand();
+                }
+            });
+            
+            // 右摇杆事件 - 控制角速度
+            rightJoystick.on('move', function(evt, data) {
+                if (data.direction && data.direction.x) {
+                    // 计算角速度 - 左为正，右为负
+                    const speedRatio = Math.min(data.distance / 60, 1);  // 60是摇杆半径
+                    if (data.direction.x === 'left') {
+                        currentOmega = speedRatio * maxOmega;
+                    } else if (data.direction.x === 'right') {
+                        currentOmega = -speedRatio * maxOmega;
+                    }
+                    currentOmegaDisplay.textContent = currentOmega.toFixed(2);
+                    sendControlCommand();
+                }
+            });
+            
+            rightJoystick.on('end', function() {
+                currentOmega = 0;
+                currentOmegaDisplay.textContent = "0.00";
+                if (currentVx === 0) {
+                    sendStopCommand();
+                } else {
+                    sendControlCommand();
+                }
+            });
+            
+            // 滑块控件事件
+            function updateControlSettings() {
+                maxSpeed = parseFloat(maxSpeedSlider.value);
+                maxOmega = parseFloat(maxOmegaSlider.value);
+                acceleration = parseInt(accelerationSlider.value);
+                
+                maxSpeedValue.textContent = maxSpeed.toFixed(1);
+                maxOmegaValue.textContent = maxOmega.toFixed(1);
+                accelerationValue.textContent = acceleration;
+            }
+            
+            maxSpeedSlider.addEventListener('input', updateControlSettings);
+            maxOmegaSlider.addEventListener('input', updateControlSettings);
+            accelerationSlider.addEventListener('input', updateControlSettings);
+            
+            // 初始化滑块值显示
+            updateControlSettings();
+            
+            // 禁用长按时的文本选中和拖动行为
+            document.body.addEventListener('contextmenu', function(e) {
                 e.preventDefault();
-                // 立即执行一次操作（短按效果）
-                doAction(actionName);
-                // 设置定时器，长按后持续执行
-                pressTimer = setInterval(() => {
-                    doAction(actionName);
-                }, LONG_PRESS_INTERVAL);
-            };
-            const endHandler = function(e) {
-                // 清除计时器
-                clearInterval(pressTimer);
-            };
-            // 针对触屏设备
-            btn.addEventListener('touchstart', startHandler);
-            btn.addEventListener('touchend', endHandler);
-            btn.addEventListener('touchcancel', endHandler);
-            // 针对鼠标
-            btn.addEventListener('mousedown', startHandler);
-            btn.addEventListener('mouseup', endHandler);
-            btn.addEventListener('mouseleave', endHandler);
+            });
+            
+            // 检查会话
+            checkSession();
+        });
+        
+        // 发送控制命令（带节流）
+        function sendControlCommand() {
+            const now = Date.now();
+            if (now - lastCommandTime < CONFIG.commandDebounceTime) {
+                clearTimeout(commandTimer);
+                commandTimer = setTimeout(doSendCommand, CONFIG.commandDebounceTime);
+                return;
+            }
+            
+            doSendCommand();
         }
-
-        // 修改 doAction 函数，只发送 HTTP 请求
-        function doAction(action) {
-            const speed = document.getElementById('speed-slider').value;
-            const omega = speed;  // 使用速度滑块值作为角速度
-            const acceleration = document.getElementById('acceleration-slider').value;
-
-            fetch(`${API_BASE_URL}/control/${action}`, {
+        
+        // 实际发送命令的函数
+        function doSendCommand() {
+            lastCommandTime = Date.now();
+            
+            console.log(`发送命令: vx=${currentVx.toFixed(2)}, omega=${currentOmega.toFixed(2)}`);
+            
+            fetch(`${CONFIG.apiBaseUrl}/control/move`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ speed: speed, omega: omega, acceleration: acceleration })
+                body: JSON.stringify({ 
+                    speed: currentVx,
+                    omega: currentOmega,
+                    acceleration: acceleration
+                })
             })
             .then(response => {
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
-                console.log(`执行操作：${action}, 速度：${speed}, 角速度：${omega}, 加速度：${acceleration}`);
-                updateSpeedInfo(speed);
+                return response.json();
             })
             .catch(error => {
-                console.error('Error:', error);
+                console.error('控制请求错误:', error);
+                if (error.message.includes('401')) {
+                    window.location.href = '/';
+                }
             });
         }
-
+        
+        // 发送停止命令
+        function sendStopCommand() {
+            console.log('发送停止命令');
+            
+            fetch(`${CONFIG.apiBaseUrl}/control/stop`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({})
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                currentVx = 0;
+                currentOmega = 0;
+                currentVxDisplay.textContent = "0.00";
+                currentOmegaDisplay.textContent = "0.00";
+            })
+            .catch(error => {
+                console.error('停止请求错误:', error);
+                if (error.message.includes('401')) {
+                    window.location.href = '/';
+                }
+            });
+        }
+        
         // 添加会话检查函数
         function checkSession() {
-            fetch('/control')
+            fetch(`${CONFIG.apiBaseUrl}/control`)
                 .then(response => {
                     if (!response.ok) {
-                        // 如果session过期，重定向到登录页
                         window.location.href = '/';
                     }
                 })
@@ -359,41 +523,9 @@
                     window.location.href = '/';
                 });
         }
-
+        
         // 每分钟检查一次会话状态
         setInterval(checkSession, 60000);
-
-        // 按钮事件监听和控制器设置
-        document.addEventListener('DOMContentLoaded', function() {
-            checkSession();
-            addLongPressListener(document.getElementById('btn-forward'), 'forward');
-            addLongPressListener(document.getElementById('btn-backward'), 'backward');
-            addLongPressListener(document.getElementById('btn-left'), 'left');
-            addLongPressListener(document.getElementById('btn-right'), 'right');
-            addLongPressListener(document.getElementById('btn-stop'), 'stop');
-
-            // 禁用长按时的文本选中和拖动行为，确保体验不会触发复制剪贴
-            document.body.addEventListener('contextmenu', function(e) {
-                e.preventDefault();
-            });
-
-            // 新增控件事件：更新显示的数值并反映到速度信息中
-            const speedSlider = document.getElementById('speed-slider');
-            const accelerationSlider = document.getElementById('acceleration-slider');
-            const speedValueLabel = document.getElementById('speed-value');
-            const accelerationValueLabel = document.getElementById('acceleration-value');
-
-            function updateControlSettings() {
-                const speed = speedSlider.value;
-                const acceleration = accelerationSlider.value;
-                speedValueLabel.textContent = speed;
-                accelerationValueLabel.textContent = acceleration;
-                updateSpeedInfo(speed);
-            }
-
-            speedSlider.addEventListener('input', updateControlSettings);
-            accelerationSlider.addEventListener('input', updateControlSettings);
-        });
     </script>
 </body>
 </html>

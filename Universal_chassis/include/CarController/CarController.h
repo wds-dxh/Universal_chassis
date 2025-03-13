@@ -88,12 +88,24 @@ public:
      * @param dx X方向位移 (m)
      * @param dy Y方向位移 (m)
      * @param dtheta 旋转角度 (rad)
-     * @param acceleration 加速度 (默认值 10.0)
-     * @param subdivision 细分数 (默认 16，即16细分下3200脉冲为一圈)
      * @return true 成功下发命令至所有电机
      * @return false 至少一个电机命令下发失败
      */
     bool moveDistance(float dx, float dy, float dtheta);
+
+    /**
+     * @brief 带完整参数的位置模式控制接口
+     *
+     * @param dx X方向位移 (m)
+     * @param dy Y方向位移 (m)
+     * @param dtheta 旋转角度 (rad)
+     * @param acceleration 加速度
+     * @param speed 运动速度 (m/s)
+     * @param subdivision 细分数
+     * @return true 成功下发命令至所有电机
+     * @return false 至少一个电机命令下发失败
+     */
+    bool moveDistance(float dx, float dy, float dtheta, float acceleration, float speed, uint16_t subdivision);
 
     /**
      * @brief 带加速度（及细分参数）的接口，用户可以通过此版本自定义
@@ -108,7 +120,7 @@ public:
     bool setSpeed(float vx, float vy, float omega, float acceleration);
 
     /**
-     * @brief 带加速度（及细分参数）的接口，用户可以通过此版本自定义
+     * @brief 带加速度（及细分参数）的接口，使用默认速度
      *
      * @param dx X方向位移 (m)
      * @param dy Y方向位移 (m)
@@ -118,7 +130,7 @@ public:
      * @return true 成功下发命令至所有电机
      * @return false 至少一个电机命令下发失败
      */
-    bool moveDistance(float dx, float dy, float dtheta, float acceleration, uint16_t subdivision);  //uint16_t subdivision 表示细分数,8会溢出
+    bool moveDistance(float dx, float dy, float dtheta, float acceleration, uint16_t subdivision);
 
     /**
      * @brief 紧急停止小车运动

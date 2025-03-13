@@ -1,4 +1,16 @@
 {
+  "name": "universal-chassis-control",
+  "version": "1.0.0",
+  "description": "群体具身智能--通用底盘控制系统",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "pm2:start": "pm2 start server.js --name universal-chassis",
+    "pm2:stop": "pm2 stop universal-chassis",
+    "pm2:restart": "pm2 restart universal-chassis",
+    "pm2:logs": "pm2 logs universal-chassis"
+  },
   "dependencies": {
     "body-parser": "^1.20.3",
     "cors": "^2.8.5",
@@ -7,5 +19,10 @@
     "mqtt": "^5.10.3",
     "path": "^0.12.7",
     "ws": "^8.18.1"
-  }
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "author": "wds2dxh",
+  "license": "MIT"
 }

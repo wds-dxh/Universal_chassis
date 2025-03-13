@@ -5,27 +5,37 @@
 #include "CarController/CarController.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/queue.h"
+#include "utils/Logger.hpp"
+#include "config.h"
 
 // 定义 USB 传输 JSON 缓冲区大小
 #define USB_JSON_BUFFER_SIZE 256
+
+// 日志标签
+#define USB_TAG "USB"
+
+// 串口接收缓冲区大小
+#define SERIAL_RX_BUFFER_SIZE 512
 
 /**
  * @brief USB 控制类
  *
  * 通过 USB 虚拟串口实现与主机之间的 JSON 数据交互，用于主动下发控制命令以及状态请求/自动发布状态信息。
+ * 使用事件驱动方式处理串口数据，提高性能和响应速度。
  */
 class UsbControl {
 public:
     /**
      * @brief 构造函数，传入 CarController 对象指针
      */
-    explicit UsbControl(CarController* carCtrl)
-        : carController(carCtrl), autoSendInterval(0) {}
+    explicit UsbControl(CarController* carCtrl, uint32_t statusInterval = 100)
+        : carController(carCtrl), statusInterval(statusInterval) {}
 
     /**
      * @brief 初始化 USB 控制
      *
-     * 启动一个 FreeRTOS 任务持续监听 USB 虚拟串口数据。
+     * 启动一个 FreeRTOS 任务处理 USB 虚拟串口数据。
      */
     void begin();
 
@@ -40,97 +50,75 @@ public:
      * @brief 设置自动发送状态的时间间隔
      * @param interval_ms 间隔毫秒数（设置为0表示关闭自动发送）
      */
-    void setAutoSendInterval(uint32_t interval_ms) {
-        autoSendInterval = interval_ms;
+    void setStatusInterval(uint32_t interval_ms) {
+        statusInterval = interval_ms;
     }
+    
+    /**
+     * @brief 连接到WiFi网络
+     * @param ssid WiFi名称
+     * @param password WiFi密码
+     * @param timeout_ms 连接超时时间（毫秒）
+     * @return 连接是否成功
+     */
+    bool connectToWiFi(const char* ssid, const char* password, int timeout_ms = 10000);
 
 private:
+    // 处理接收到的命令
+    void processCommand(const String& command);
+    
     CarController* carController;
     // 自动发送状态的时间间隔（单位：毫秒），非0表示启用自动发布状态
-    uint32_t autoSendInterval;
+    uint32_t statusInterval;
     // USB 控制任务句柄
     TaskHandle_t usbTaskHandle = nullptr;
+    // 串口接收缓冲区
+    char rxBuffer[SERIAL_RX_BUFFER_SIZE];
+    // 串口接收位置
+    size_t rxPos = 0;
 };
 
 ////////////////////// 实现部分 //////////////////////
 
 void UsbControl::begin() {
-    // 创建 FreeRTOS 任务，用于一直监听 USB 虚拟串口数据
+    Logger::info(USB_TAG, "Initializing USB control interface");
+    
+    // 创建 FreeRTOS 任务处理 USB 数据
     xTaskCreate(
         [](void* param) {
             UsbControl* control = static_cast<UsbControl*>(param);
-            uint32_t lastAutoSendTime = millis();
+            uint32_t lastStatusTime = millis();
+            String commandLine;
+            
             for (;;) {
-                // 检查是否有串口数据
-                if (Serial.available()) {
-                    // 读取一行（以换行符 '\n' 为终止标志）
-                    String input = Serial.readStringUntil('\n');
-                    input.trim(); // 去除前后空白
-                    if (input.length() > 0) {
-                        // 解析 JSON 数据
-                        StaticJsonDocument<USB_JSON_BUFFER_SIZE> doc;
-                        DeserializationError error = deserializeJson(doc, input);
-                        if (error) {
-                            Serial.print("USB JSON parse error: ");
-                            Serial.println(error.c_str());
-                        } else {
-                            const char* command = doc["command"];
-                            if (command != nullptr) {
-                                if (strcmp(command, "speed") == 0) {
-                                    float vx = doc["vx"] | 0.0;
-                                    float vy = doc["vy"] | 0.0;
-                                    float omega = doc["omega"] | 0.0;
-                                    uint32_t duration = doc["duration"] | 1000;
-                                    float acceleration = doc["acceleration"] | 10.0;
-                                    Serial.println("USB: Executing speed command");
-                                    control->carController->setSpeed(vx, vy, omega, duration, acceleration);
-                                } else if (strcmp(command, "move") == 0) {
-                                    float dx = doc["dx"] | 0.0;
-                                    float dy = doc["dy"] | 0.0;
-                                    float dtheta = doc["dtheta"] | 0.0;
-                                    float acceleration = doc["acceleration"] | 10.0;
-                                    uint16_t subdivision = doc["subdivision"] | 256;
-                                    Serial.println("USB: Executing move command");
-                                    control->carController->moveDistance(dx, dy, dtheta, acceleration, subdivision);
-                                } else if (strcmp(command, "stop") == 0) {
-                                    Serial.println("USB: Executing stop command");
-                                    control->carController->stop();
-                                } else if (strcmp(command, "status") == 0) {
-                                    Serial.println("USB: Status request received");
-                                    control->publishStatus();
-                                } else if (strcmp(command, "auto") == 0) {
-                                    // 设置自动发送状态的间隔，单位毫秒
-                                    uint32_t interval = doc["interval"] | 0;
-                                    if (interval > 0) {
-                                        Serial.print("USB: Set auto status interval to ");
-                                        Serial.print(interval);
-                                        Serial.println(" ms");
-                                    } else {
-                                        Serial.println("USB: Auto status disabled");
-                                    }
-                                    control->setAutoSendInterval(interval);
-                                } else {
-                                    Serial.print("USB: Unknown command: ");
-                                    Serial.println(command);
-                                }
-                            } else {
-                                Serial.println("USB: No command field in JSON");
-                            }
+                // 处理串口数据 - 更高效的方式
+                while (Serial.available()) {
+                    char c = Serial.read();
+                    
+                    // 检测行结束
+                    if (c == '\n' || c == '\r') {
+                        if (commandLine.length() > 0) {
+                            // 处理完整的命令行
+                            control->processCommand(commandLine);
+                            commandLine = "";
                         }
+                    } else {
+                        // 添加到当前命令行
+                        commandLine += c;
                     }
                 }
                 
-                // 如果自动发送功能启用，则定期发布状态
-                if (control->autoSendInterval > 0) {
+                // 处理自动状态发送
+                if (control->statusInterval > 0) {
                     uint32_t now = millis();
-                    if (now - lastAutoSendTime >= control->autoSendInterval) {
+                    if (now - lastStatusTime >= control->statusInterval) {
                         control->publishStatus();
-                        lastAutoSendTime = now;
+                        lastStatusTime = now;
                     }
                 }
                 
-                // 小延时以释放任务
-                vTaskDelay(pdMS_TO_TICKS(50));
+                // 短暂延时，避免占用过多CPU
+                vTaskDelay(pdMS_TO_TICKS(10));
             }
         },
         "usbControlTask",
@@ -141,19 +129,109 @@ void UsbControl::begin() {
     );
 }
 
+bool UsbControl::connectToWiFi(const char* ssid, const char* password, int timeout_ms) {
+    Logger::info(WIFI_TAG, "Connecting to WiFi: %s", ssid);
+    WiFi.begin(ssid, password);
+    
+    // 等待连接，带超时
+    int elapsed = 0;
+    while (WiFi.status() != WL_CONNECTED && elapsed < timeout_ms) {
+        Logger::debug(WIFI_TAG, ".");
+        delay(500);
+        elapsed += 500;
+    }
+    
+    if (WiFi.status() == WL_CONNECTED) {
+        Logger::info(WIFI_TAG, "Connected to WiFi. IP: %s", WiFi.localIP().toString().c_str());
+        return true;
+    } else {
+        Logger::error(WIFI_TAG, "Failed to connect to WiFi");
+        return false;
+    }
+}
+
+void UsbControl::processCommand(const String& commandStr) {
+    if (commandStr.length() == 0) return;
+    
+    Logger::debug(USB_TAG, "Processing command: %s", commandStr.c_str());
+    
+    // 解析 JSON 数据
+    JsonDocument doc;
+    DeserializationError error = deserializeJson(doc, commandStr);
+    if (error) {
+        // 只在调试模式下输出错误
+        Logger::debug(USB_TAG, "JSON parse error: %s", error.c_str());
+        return;
+    }
+    
+    const char* command = doc["command"];
+    if (!command) {
+        Logger::debug(USB_TAG, "No command field in JSON");
+        return;
+    }
+    
+    // 处理各种命令
+    if (strcmp(command, "speed") == 0) {
+        float vx = doc["vx"] | 0.0;
+        float vy = doc["vy"] | 0.0;
+        float omega = doc["omega"] | 0.0;
+        float acceleration = doc["acceleration"] | 10.0;
+        Logger::debug(USB_TAG, "Speed command: vx=%.2f, vy=%.2f, omega=%.2f", vx, vy, omega);
+        carController->setSpeed(vx, vy, omega, acceleration);
+    } 
+    else if (strcmp(command, "move") == 0) {
+        float dx = doc["dx"] | 0.0;
+        float dy = doc["dy"] | 0.0;
+        float dtheta = doc["dtheta"] | 0.0;
+        float speed = doc["speed"] | 1.0;
+        float acceleration = doc["acceleration"] | 10.0;
+        uint16_t subdivision = doc["subdivision"] | 256;
+        Logger::debug(USB_TAG, "Move command: dx=%.2f, dy=%.2f, dtheta=%.2f, speed=%.2f", dx, dy, dtheta, speed);
+        carController->moveDistance(dx, dy, dtheta, acceleration, speed, subdivision);
+    } 
+    else if (strcmp(command, "stop") == 0) {
+        Logger::debug(USB_TAG, "Stop command");
+        carController->stop();
+    } 
+    else if (strcmp(command, "get_status") == 0) {
+        Logger::debug(USB_TAG, "Status request");
+        publishStatus();
+    } 
+    else if (strcmp(command, "set_interval") == 0) {
+        // 设置自动发送状态的间隔
+        uint32_t interval = doc["interval"] | 0;
+        setStatusInterval(interval);
+        Logger::debug(USB_TAG, "Set status interval: %d ms", interval);
+    }
+    else if (strcmp(command, "set_wifi") == 0) {
+        // 处理WiFi设置命令
+        const char* ssid = doc["ssid"];
+        const char* password = doc["password"];
+        
+        if (ssid && password) {
+            Logger::info(USB_TAG, "Setting WiFi: SSID=%s", ssid);
+            // 尝试连接到新的WiFi
+            connectToWiFi(ssid, password);
+        } else {
+            Logger::warn(USB_TAG, "Invalid WiFi settings");
+        }
+    }
+}
+
 void UsbControl::publishStatus() {
     // 获取当前小车状态
     CarState state = carController->getCarState();
-    StaticJsonDocument<USB_JSON_BUFFER_SIZE> doc;
+    JsonDocument doc;
     doc["vx"] = state.vx;
     doc["vy"] = state.vy;
     doc["omega"] = state.omega;
-    JsonArray speeds = doc.createNestedArray("wheelSpeeds");
+    JsonArray speeds = doc["wheelSpeeds"].to<JsonArray>();
     for (auto speed : state.wheelSpeeds) {
         speeds.add(speed);
     }
     char buffer[USB_JSON_BUFFER_SIZE];
     size_t n = serializeJson(doc, buffer);
+    
     // 将 JSON 状态数据发送到 USB 虚拟串口
     Serial.println(buffer);
 }
