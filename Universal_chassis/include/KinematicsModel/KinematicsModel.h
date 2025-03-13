@@ -116,8 +116,9 @@ public:
      * @brief 构造函数
      * @param wheelRadius 轮子半径 (m)
      * @param trackWidth 左右轮距 (m)
+     * @param reductionRatio 减速比
      */
-    NormalWheelKinematics(float wheelRadius, float trackWidth);
+    NormalWheelKinematics(float wheelRadius, float trackWidth,float reductionRatio);
 
     virtual void calculateSpeedCommands(float vx, float vy, float omega,
                                       std::array<uint16_t, 4>& speeds) override;
@@ -125,8 +126,9 @@ public:
     virtual void calculatePositionCommands(float dx, float dy, float dtheta,
                                          std::array<int32_t, 4>& pulses,
                                          uint16_t subdivision) override;
-private:
-    float wheelRadius;
+private:   //-------硬件参数都是用运动学模型输入，软件参数如细分数，加速度，速度等都是用CarController输入
+    float wheelRadius;       // 轮子半径
     float wheelCircumference;  // 内部计算得出：2 * PI * wheelRadius
     float trackWidth;         // 左右轮距
+    float reductionRatio;     // 减速比
 };

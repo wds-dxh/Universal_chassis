@@ -16,7 +16,7 @@
 #define MQTT_PASSWORD "public"
 
 // MQTT 主题
-#define MQTT_TOPIC_CONTROL "CarControl"
+#define MQTT_TOPIC_CONTROL "CarControl" 
 #define MQTT_TOPIC_STATUS  "CarStatus"
 
 // JSON 缓冲区大小
@@ -171,12 +171,12 @@ void MqttControl::mqttCallback(char* topic, byte* payload, unsigned int length) 
         float vx = doc["vx"] | 0.0;
         float vy = doc["vy"] | 0.0;
         float omega = doc["omega"] | 0.0;
-        uint32_t duration = doc["duration"] | 1000;
+        // uint32_t duration = doc["duration"] | 1000;  //去掉了这个参数
         float acceleration = doc["acceleration"] | 10.0;
         Serial.println("Executing speed command");
         if (instance && instance->carController) {
             // 调用带自定义加速度的速度模式接口
-            instance->carController->setSpeed(vx, vy, omega, duration, acceleration);
+            instance->carController->setSpeed(vx, vy, omega, acceleration);
         }
     } else if (strcmp(command, "move") == 0) {
         float dx = doc["dx"] | 0.0;

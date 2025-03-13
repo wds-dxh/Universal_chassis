@@ -6,17 +6,18 @@
 
 使用接口：  
 ```cpp
-bool setSpeed(float vx, float vy, float omega, uint32_t duration_ms, [float acceleration]);
+bool setSpeed(float vx, float vy, float omega, [float acceleration]);
 ```
 
 - **参数说明：**  
   - `vx`：X 方向的线速度（单位：m/s），正值表示前进、负值表示后退  
   - `vy`：Y 方向的线速度（单位：m/s）  
   - `omega`：角速度（单位：rad/s），正值表示逆时针旋转  
-  - `duration_ms`：运动持续时间（毫秒）；系统在运动结束后将自动停止所有电机  
   - `acceleration`（可选）：加速度档位（默认值由 `configure()` 接口设置）
 
 调用该接口后，系统会根据运动学模型计算各轮所需转速，然后分解方向信息调用各个步进电机的速度模式接口，并通过多机同步控制确保运动一致。
+
+要停止小车运动，需要显式调用 `stop()` 方法。
 
 ## 2. 位置模式
 

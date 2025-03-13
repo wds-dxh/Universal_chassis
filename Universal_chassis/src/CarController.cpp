@@ -11,7 +11,7 @@ CarController::CarController(StepperMotor* motorRF, StepperMotor* motorRR,
 {
     // 初始化默认控制参数
     defaultConfig.defaultAcceleration = 10.0f;
-    defaultConfig.defaultSubdivision = 256*6; //256*6是减速比
+    defaultConfig.defaultSubdivision = 256;
     defaultConfig.defaultSpeed = 1.0f;
 
     // 初始化状态
@@ -22,7 +22,7 @@ CarController::CarController(StepperMotor* motorRF, StepperMotor* motorRR,
     currentState.wheelSpeeds[1] = 0;
     currentState.wheelSpeeds[2] = 0;
     currentState.wheelSpeeds[3] = 0;
-
+ 
     //使能所有的电机
     motorRF->enableMotor(true, false);
     motorRR->enableMotor(true, false);
@@ -36,13 +36,13 @@ void CarController::configure(const CarControllerConfig& config) {
 }
 
 // 速度模式控制（使用默认加速度）
-bool CarController::setSpeed(float vx, float vy, float omega, uint32_t duration_ms) {
-    return setSpeed(vx, vy, omega, duration_ms, defaultConfig.defaultAcceleration);       //加速度调用默认加速度
+bool CarController::setSpeed(float vx, float vy, float omega) {
+    return setSpeed(vx, vy, omega, defaultConfig.defaultAcceleration);       //加速度调用默认加速度
 }
 
 // 速度模式控制（自定义加速度）  
 // 本函数通过运动学模型计算各电机的转速指令，并将负值转为方向信息传递给电机控制
-bool CarController::setSpeed(float vx, float vy, float omega, uint32_t duration_ms, float acceleration) {
+bool CarController::setSpeed(float vx, float vy, float omega, float acceleration) {
     // 计算速度指令
     // 注意：这里假设运动学模型的 calculateSpeedCommands 输出类型已修改为 std::array<int16_t, 4>
     std::array<int16_t, 4> speedCommands;
@@ -80,52 +80,6 @@ bool CarController::setSpeed(float vx, float vy, float omega, uint32_t duration_
     if (!motorRF->syncMove())
         success = false;
     
-    
-    
-    // 运动时间结束后停止所有电机
-    if (duration_ms != 0){  
-    // 延时运动时间（使用 FreeRTOS 延时，避免阻塞）
-        vTaskDelay(pdMS_TO_TICKS(duration_ms));
-        stop();
-    }
-    
-    // 单独启动一个任务，延时duration_ms后停止，防止在这里堵塞其他任务
-    // 注意：需要在CarController类中添加成员变量 uint32_t stopDelayMs; 来存储延时时间
-
-    // 创建任务
-    // stopDelayMs = duration_ms;
-    // if (stopTaskHandle == nullptr) {
-    // xTaskCreate(
-    //     [](void* param) {  // 使用无捕获列表的lambda表达式
-    //         CarController* controller = static_cast<CarController*>(param);
-    //         vTaskDelay(pdMS_TO_TICKS(controller->stopDelayMs));  // 从类成员获取延时时间
-    //         controller->stop();
-    //         vTaskDelete(nullptr);  // 删除当前任务
-    //     },  // Ensure the lambda is cast to TaskFunction_t
-    //     "stopTask",
-    //     4096,
-    //     this,
-    //     1,
-    //     &stopTaskHandle
-    // );
-    // }
-    // else {
-    //     vTaskDelete(stopTaskHandle);
-    //     this->stop();
-    //     //删除任务后创建任务
-    //     xTaskCreate(
-    //         [](void* param) {
-    //             CarController* controller = static_cast<CarController*>(param);
-    //             vTaskDelay(pdMS_TO_TICKS(controller->stopDelayMs));
-    //             controller->stop();
-    //         },
-    //         "stopTask",
-    //         4096,
-    //         this,
-    //         1,
-    //         &stopTaskHandle
-    //     );
-    // }
     return success;
 }
 
@@ -205,6 +159,7 @@ CarState CarController::getCarState() {
     speeds[3] = static_cast<uint16_t>(sLF);
     
     currentState.wheelSpeeds = speeds;
+    
     // 这里未做逆运动学计算，故 vx,vy,omega 暂置 0
     currentState.vx = 0;
     currentState.vy = 0;

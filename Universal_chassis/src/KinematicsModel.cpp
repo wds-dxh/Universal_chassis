@@ -5,8 +5,8 @@
 
 //======================= NormalWheelKinematics 实现 =======================
 
-NormalWheelKinematics::NormalWheelKinematics(float wheelRadius, float trackWidth)
-    : wheelRadius(wheelRadius), trackWidth(trackWidth)
+NormalWheelKinematics::NormalWheelKinematics(float wheelRadius, float trackWidth,float reductionRatio)
+    : wheelRadius(wheelRadius), trackWidth(trackWidth),reductionRatio(reductionRatio)
 {
     // 计算轮子周长
     wheelCircumference = 2.0f * static_cast<float>(M_PI) * wheelRadius;
@@ -19,11 +19,11 @@ void NormalWheelKinematics::calculateSpeedCommands(float vx, float vy, float ome
     float leftRpm  = (vx - (trackWidth / 2.0f) * omega) * 60.0f / wheelCircumference;
     
     // 右侧轮（前进为CW，对应负RPM）
-    speeds[0] = static_cast<uint16_t>(-rightRpm); // 右前轮
-    speeds[1] = static_cast<uint16_t>(-rightRpm); // 右后轮
+    speeds[0] = static_cast<uint16_t>(-rightRpm*reductionRatio); // 右前轮
+    speeds[1] = static_cast<uint16_t>(-rightRpm*reductionRatio); // 右后轮
     // 左侧轮（前进为CCW，对应正RPM）
-    speeds[2] = static_cast<uint16_t>(leftRpm);   // 左后轮
-    speeds[3] = static_cast<uint16_t>(leftRpm);   // 左前轮
+    speeds[2] = static_cast<uint16_t>(leftRpm*reductionRatio);   // 左后轮
+    speeds[3] = static_cast<uint16_t>(leftRpm*reductionRatio);   // 左前轮
 }
 
 void NormalWheelKinematics::calculatePositionCommands(float dx, float dy, float dtheta, 
@@ -42,11 +42,11 @@ void NormalWheelKinematics::calculatePositionCommands(float dx, float dy, float 
 
 
     // 右侧轮（前进为CW，对应负脉冲）
-    pulses[0] = static_cast<int32_t>(-std::lround(pulses_forward + pulses_rotation)); // 右前轮
-    pulses[1] = static_cast<int32_t>(-std::lround(pulses_forward + pulses_rotation)); // 右后轮
+    pulses[0] = static_cast<int32_t>(-std::lround(pulses_forward + pulses_rotation)*reductionRatio); // 右前轮
+    pulses[1] = static_cast<int32_t>(-std::lround(pulses_forward + pulses_rotation)*reductionRatio); // 右后轮
     // 左侧轮（前进为CCW，对应正脉冲）
-    pulses[2] = static_cast<int32_t>(std::lround(pulses_forward - pulses_rotation));  // 左后轮
-    pulses[3] = static_cast<int32_t>(std::lround(pulses_forward - pulses_rotation));  // 左前轮
+    pulses[2] = static_cast<int32_t>(std::lround(pulses_forward - pulses_rotation)*reductionRatio);  // 左后轮
+    pulses[3] = static_cast<int32_t>(std::lround(pulses_forward - pulses_rotation)*reductionRatio);  // 左前轮
 }
 
 //======================= MecanumKinematics 空实现 ========================

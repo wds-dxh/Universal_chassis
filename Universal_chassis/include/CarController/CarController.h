@@ -67,17 +67,16 @@ public:
      * @brief 通过速度模式控制小车运动
      *
      * 根据给定的期望车速（vx, vy, omega）和加速度计算各个电机的速度，
-     * 并调用步进电机的速度模式接口进行控制，同时设置运动持续时间。
+     * 并调用步进电机的速度模式接口进行控制。
      *
      * @param vx X方向线速度 (m/s)
      * @param vy Y方向线速度 (m/s)
      * @param omega 旋转角速度 (rad/s)
-     * @param duration_ms 运动持续时间 (毫秒)
      * @param acceleration 加速度 (默认值 10.0)
      * @return true 成功下发命令至所有电机
      * @return false 至少一个电机命令下发失败
      */
-    bool setSpeed(float vx, float vy, float omega, uint32_t duration_ms);
+    bool setSpeed(float vx, float vy, float omega);
 
     /**
      * @brief 通过位置模式控制小车运动
@@ -102,13 +101,11 @@ public:
      * @param vx X方向线速度 (m/s)
      * @param vy Y方向线速度 (m/s)
      * @param omega 旋转角速度 (rad/s)
-     * @param duration_ms 运动持续时间 (毫秒)
      * @param acceleration 加速度
-     * @param subdivision 细分数
      * @return true 成功下发命令至所有电机
      * @return false 至少一个电机命令下发失败
      */
-    bool setSpeed(float vx, float vy, float omega, uint32_t duration_ms, float acceleration);
+    bool setSpeed(float vx, float vy, float omega, float acceleration);
 
     /**
      * @brief 带加速度（及细分参数）的接口，用户可以通过此版本自定义

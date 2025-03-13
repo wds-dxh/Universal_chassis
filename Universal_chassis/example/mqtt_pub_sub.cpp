@@ -22,9 +22,8 @@ StepperMotor motor2(2, &Serial00, ChecksumType::FIXED, 1000);
 StepperMotor motor3(3, &Serial00, ChecksumType::FIXED, 1000);
 StepperMotor motor4(4, &Serial00, ChecksumType::FIXED, 1000);
 
-// 创建普通轮运动学模型实例：例子中轮子半径为 0.09m, 轮距 0.6m(v1.0)
-// 创建普通轮运动学模型实例：例子中轮子半径为 0.09m, 轮距 0.45m(v1.1)
-NormalWheelKinematics normalKinematics(0.09f, 0.45f, 6);
+// 创建普通轮运动学模型实例：例子中轮子半径为 0.08m, 轮距 0.6m
+NormalWheelKinematics normalKinematics(0.08f, 0.6f);
 
 // 创建 CarController 对象（传入四个轮及主控板电机和运动学模型）
 CarController carController(&motor1, &motor2, &motor3, &motor4, &motor0, &normalKinematics);
@@ -35,11 +34,6 @@ MqttControl mqttControl(&carController);
 void setup() {
     Serial00.begin(115200, SERIAL_8N1, RX, TX);
     Serial.begin(115200);
-
-    // while (!Serial.available()) {            //usb调试使用，用户启动程序
-    //     Serial.println("Waiting for Serial00 to be available...");
-    //     delay(1000);
-    // }
 
     // 启动 MQTT 控制，内部会连接 WiFi、MQTT 并启动 FreeRTOS 任务
     mqttControl.begin(100);
