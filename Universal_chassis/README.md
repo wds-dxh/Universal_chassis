@@ -121,9 +121,9 @@
 
 ## 详细协议说明
 系统使用JSON格式的控制协议，支持多种命令类型。详细协议说明请参考：
-- [通用控制协议](Universal_chassis/include/protocol/ControlProtocol.md)
-- [MQTT控制协议](Universal_chassis/include/task/Mqtt_Control.md)
-- [USB控制协议](Universal_chassis/include/task/Usb_Control.md)
+- [通用控制协议](./include/protocol/ControlProtocol.md)
+- [MQTT控制协议](./include/task/Mqtt_Control.md)
+- [USB控制协议](./include/task/Usb_Control.md)
 
 
 ## 高级配置
