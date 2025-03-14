@@ -13,6 +13,31 @@
 - **实时状态反馈**：提供速度和电机状态的实时反馈
 - **动态配置**：支持运行时修改WiFi连接和状态发布间隔
 - **灵活的日志系统**：多级别日志控制，便于调试和生产环境使用
+- **并发控制**：支持MQTT和USB同时控制，无资源冲突
+
+## 系统架构
+
+系统采用模块化设计，主要包含以下组件：
+
+- **CarController**：核心控制类，负责协调电机控制和运动学计算
+- **ControlManager**：控制管理器，处理命令队列和状态缓存，解决并发控制问题
+- **KinematicsModel**：运动学模型，计算车轮速度和位置
+- **StepperMotor**：步进电机驱动接口
+- **MqttControl**：MQTT通信控制模块
+- **UsbControl**：USB串口通信控制模块
+- **Logger**：日志系统，支持多级别日志
+
+通信协议采用统一的JSON格式，确保MQTT和USB控制接口的一致性。控制流程如下：
+
+```
+MQTT/USB控制 -> ControlManager -> CarController -> 步进电机
+```
+
+状态查询流程：
+
+```
+步进电机 -> CarController -> ControlManager(缓存) -> MQTT/USB状态发布
+```
 
 ## 硬件要求
 
@@ -75,9 +100,14 @@
 
 ## 控制协议
 
-系统使用JSON格式的控制协议，支持多种命令类型：
+系统使用JSON格式的控制协议，支持多种命令类型。详细协议说明请参考：
+- [通用控制协议](./include/protocol/ControlProtocol.md)
+- [MQTT控制协议](./include/task/Mqtt_Control.md)
+- [USB控制协议](./include/task/Usb_Control.md)
 
-### 速度模式控制
+## 示例
+
+### 速度控制示例
 
 ```json
 {
@@ -89,7 +119,7 @@
 }
 ```
 
-### 位置模式控制
+### 位置控制示例
 
 ```json
 {
@@ -102,29 +132,6 @@
   "subdivision": 256
 }
 ```
-
-### 紧急停止
-
-```json
-{
-  "command": "stop"
-}
-```
-
-### 获取状态
-
-```json
-{
-  "command": "get_status"
-}
-```
-
-## 详细协议说明
-系统使用JSON格式的控制协议，支持多种命令类型。详细协议说明请参考：
-- [通用控制协议](./include/protocol/ControlProtocol.md)
-- [MQTT控制协议](./include/task/Mqtt_Control.md)
-- [USB控制协议](./include/task/Usb_Control.md)
-
 
 ## 高级配置
 

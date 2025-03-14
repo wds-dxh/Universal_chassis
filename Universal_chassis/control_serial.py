@@ -1,366 +1,282 @@
 #!/usr/bin/env python3
-"""
-ESP32小车USB串口控制测试程序
+# -*- coding: utf-8 -*-
 
-该程序用于测试通过USB串口与ESP32小车进行通信，
-实现了控制协议中定义的所有命令，并提供简单的命令行界面。
-"""
-
-import serial   # pip install pyserial
+import serial
 import json
 import time
 import argparse
 import threading
-from typing import Dict, Any, Optional
+import re
+from colorama import init, Fore, Style      # pip install colorama
+
+# 初始化colorama
+init()
 
 class CarController:
-    """ESP32小车USB串口控制类"""
-    
-    def __init__(self, port: str, baudrate: int = 115200, timeout: float = 1.0):
-        """
-        初始化串口连接
-        
-        Args:
-            port: 串口设备名，如 '/dev/ttyUSB0' 或 'COM3'
-            baudrate: 波特率，默认115200
-            timeout: 超时时间（秒）
-        """
-        self.ser = serial.Serial(port, baudrate, timeout=timeout)
-        self.status_callback = None
-        self.running = False
-        self.status_thread = None
-        
-        # 清空缓冲区
-        self.ser.reset_input_buffer()
-        self.ser.reset_output_buffer()
-        
-        print(f"已连接到 {port}，波特率 {baudrate}")
-    
-    def close(self):
-        """关闭串口连接"""
-        self.running = False
-        if self.status_thread:
-            self.status_thread.join(timeout=1.0)
-        self.ser.close()
-        print("串口连接已关闭")
-    
-    def _send_command(self, command: Dict[str, Any]):
-        """
-        发送JSON格式命令
-        
-        Args:
-            command: 包含命令的字典
-        """
-        cmd_str = json.dumps(command)
-        self.ser.write((cmd_str + '\n').encode())
-        self.ser.flush()
-        print(f"发送: {cmd_str}")
-    
-    def _read_response(self) -> Optional[Dict[str, Any]]:
-        """
-        读取JSON格式响应
-        
-        Returns:
-            解析后的JSON响应，如果没有响应或解析失败则返回None
-        """
-        try:
-            line = self.ser.readline().decode().strip()
-            if line:
-                print(f"接收: {line}")
-                return json.loads(line)
-        except json.JSONDecodeError:
-            print(f"JSON解析错误: {line}")
-        except Exception as e:
-            print(f"读取响应错误: {e}")
-        return None
-    
-    def start_status_listener(self, callback=None):
-        """
-        启动状态监听线程
-        
-        Args:
-            callback: 状态更新回调函数，接收状态字典作为参数
-        """
-        self.status_callback = callback
+    def __init__(self, port, baudrate=460800):
+        """初始化小车控制器"""
+        self.serial = serial.Serial(port, baudrate, timeout=0.1)
         self.running = True
+        self.status_lock = threading.Lock()
+        self.latest_status = None
+        self.rx_buffer = ""  # 接收缓冲区
         
-        def listener():
-            while self.running:
-                response = self._read_response()
-                if response and self.status_callback:
-                    self.status_callback(response)
-        
-        self.status_thread = threading.Thread(target=listener, daemon=True)
-        self.status_thread.start()
+        # 启动状态接收线程
+        self.rx_thread = threading.Thread(target=self._receive_status, daemon=True)
+        self.rx_thread.start()
     
-    def set_speed(self, vx: float, vy: float = 0.0, omega: float = 0.0, acceleration: float = 10.0):
-        """
-        速度模式控制
-        
-        Args:
-            vx: X方向线速度 (m/s)
-            vy: Y方向线速度 (m/s)
-            omega: 旋转角速度 (rad/s)
-            acceleration: 加速度
-        """
-        command = {
-            "command": "speed",
-            "vx": vx,
-            "vy": vy,
-            "omega": omega,
-            "acceleration": acceleration
-        }
-        self._send_command(command)
+    def _receive_status(self):
+        """接收并解析小车状态的线程函数"""
+        while self.running:
+            try:
+                # 读取串口数据
+                data = self.serial.read(1024).decode('utf-8', errors='ignore')
+                if data:
+                    # 添加到接收缓冲区
+                    self.rx_buffer += data
+                    
+                    # 尝试从缓冲区中提取完整的JSON对象
+                    self._process_buffer()
+                    
+                time.sleep(0.01)  # 短暂休眠，减少CPU占用
+            except Exception as e:
+                print(f"{Fore.RED}接收状态时出错: {e}{Style.RESET_ALL}")
     
-    def move_distance(self, dx: float, dy: float = 0.0, dtheta: float = 0.0, 
-                     speed: float = 1.0, acceleration: float = 10.0, subdivision: int = 256):
-        """
-        位置模式控制
-        
-        Args:
-            dx: X方向位移 (m)
-            dy: Y方向位移 (m)
-            dtheta: 旋转角度 (rad)
-            speed: 运动速度 (m/s)
-            acceleration: 加速度
-            subdivision: 细分数
-        """
-        command = {
-            "command": "move",
-            "dx": dx,
-            "dy": dy,
-            "dtheta": dtheta,
-            "speed": speed,
-            "acceleration": acceleration,
-            "subdivision": subdivision
-        }
-        self._send_command(command)
-    
-    def stop(self):
-        """紧急停止"""
-        command = {"command": "stop"}
-        self._send_command(command)
-    
-    def get_status(self):
-        """请求获取状态"""
-        command = {"command": "get_status"}
-        self._send_command(command)
-    
-    def set_status_interval(self, interval_ms: int):
-        """
-        设置状态发布间隔
-        
-        Args:
-            interval_ms: 状态发布间隔（毫秒），0表示禁用自动发布
-        """
-        command = {
-            "command": "set_interval",
-            "interval": interval_ms
-        }
-        self._send_command(command)
-    
-    def set_wifi(self, ssid: str, password: str):
-        """
-        设置WiFi连接
-        
-        Args:
-            ssid: WiFi网络名称
-            password: WiFi密码
-        """
-        command = {
-            "command": "set_wifi",
-            "ssid": ssid,
-            "password": password
-        }
-        self._send_command(command)
-
-
-def print_status(status):
-    """打印小车状态信息"""
-    print("\n--- 小车状态 ---")
-    print(f"线速度X: {status.get('vx', 0):.2f} m/s")
-    print(f"线速度Y: {status.get('vy', 0):.2f} m/s")
-    print(f"角速度: {status.get('omega', 0):.2f} rad/s")
-    
-    wheel_speeds = status.get('wheelSpeeds', [0, 0, 0, 0])
-    print(f"轮子速度: {wheel_speeds}")
-    print("----------------\n")
-
-
-def interactive_mode(controller):
-    """交互式命令行模式"""
-    print("\n=== ESP32小车控制测试程序 ===")
-    print("可用命令:")
-    print("  speed <vx> [vy] [omega] [acceleration] - 速度模式控制")
-    print("  move <dx> [dy] [dtheta] [speed] [acceleration] [subdivision] - 位置模式控制")
-    print("  stop - 紧急停止")
-    print("  status - 获取当前状态")
-    print("  interval <ms> - 设置状态发布间隔")
-    print("  wifi <ssid> <password> - 设置WiFi连接")
-    print("  exit/quit - 退出程序")
-    print("==============================\n")
-    
-    controller.start_status_listener(print_status)
-    
-    try:
+    def _process_buffer(self):
+        """处理接收缓冲区，提取完整的JSON对象"""
+        # 查找可能的JSON对象（以{开始，以}结束）
         while True:
-            cmd = input("> ").strip()
-            if not cmd:
-                continue
+            # 查找第一个{和最后一个}
+            start = self.rx_buffer.find('{')
+            if start == -1:
+                # 没有找到{，清空缓冲区
+                self.rx_buffer = ""
+                return
             
-            parts = cmd.split()
-            command = parts[0].lower()
+            end = self.rx_buffer.find('}', start)
+            if end == -1:
+                # 没有找到}，保留缓冲区等待更多数据
+                return
             
-            if command in ["exit", "quit"]:
-                break
+            # 提取可能的JSON字符串
+            json_str = self.rx_buffer[start:end+1]
             
-            elif command == "speed":
-                try:
-                    vx = float(parts[1]) if len(parts) > 1 else 0.0
+            # 更新缓冲区，移除已处理的部分
+            self.rx_buffer = self.rx_buffer[end+1:]
+            
+            # 尝试解析JSON
+            try:
+                status = json.loads(json_str)
+                # 解析成功，更新状态
+                with self.status_lock:
+                    self.latest_status = status
+                print(f"接收: {json_str}")
+                self._print_status(status)
+            except json.JSONDecodeError as e:
+                print(f"{Fore.YELLOW}JSON解析错误: {json_str}{Style.RESET_ALL}")
+    
+    def _print_status(self, status):
+        """打印小车状态信息"""
+        print(f"\n{Fore.CYAN}--- 小车状态 ---{Style.RESET_ALL}")
+        print(f"线速度X: {status.get('vx', 0):.2f} m/s")
+        print(f"线速度Y: {status.get('vy', 0):.2f} m/s")
+        print(f"角速度: {status.get('omega', 0):.2f} rad/s")
+        print(f"轮子速度: {status.get('wheelSpeeds', [0, 0, 0, 0])}")
+        print(f"{Fore.CYAN}----------------{Style.RESET_ALL}\n")
+    
+    def send_command(self, command):
+        """发送命令到小车"""
+        try:
+            # 确保命令是JSON格式
+            if not command.startswith('{'):
+                # 尝试解析简单命令
+                parts = command.strip().split()
+                cmd_type = parts[0].lower()
+                
+                if cmd_type == "speed" and len(parts) >= 2:
+                    # speed vx [vy] [omega] [acceleration]
+                    vx = float(parts[1])
                     vy = float(parts[2]) if len(parts) > 2 else 0.0
                     omega = float(parts[3]) if len(parts) > 3 else 0.0
                     accel = float(parts[4]) if len(parts) > 4 else 10.0
-                    controller.set_speed(vx, vy, omega, accel)
-                except (IndexError, ValueError) as e:
-                    print(f"参数错误: {e}")
-            
-            elif command == "move":
-                try:
-                    dx = float(parts[1]) if len(parts) > 1 else 0.0
+                    command = json.dumps({
+                        "command": "speed",
+                        "vx": vx,
+                        "vy": vy,
+                        "omega": omega,
+                        "acceleration": accel
+                    })
+                
+                elif cmd_type == "move" and len(parts) >= 2:
+                    # move dx [dy] [dtheta] [speed] [acceleration] [subdivision]
+                    dx = float(parts[1])
                     dy = float(parts[2]) if len(parts) > 2 else 0.0
                     dtheta = float(parts[3]) if len(parts) > 3 else 0.0
                     speed = float(parts[4]) if len(parts) > 4 else 1.0
                     accel = float(parts[5]) if len(parts) > 5 else 10.0
                     subdiv = int(parts[6]) if len(parts) > 6 else 256
-                    controller.move_distance(dx, dy, dtheta, speed, accel, subdiv)
-                except (IndexError, ValueError) as e:
-                    print(f"参数错误: {e}")
-            
-            elif command == "stop":
-                controller.stop()
-            
-            elif command == "status":
-                controller.get_status()
-            
-            elif command == "interval":
-                try:
-                    interval = int(parts[1]) if len(parts) > 1 else 1000
-                    controller.set_status_interval(interval)
-                except (IndexError, ValueError) as e:
-                    print(f"参数错误: {e}")
-            
-            elif command == "wifi":
-                try:
+                    command = json.dumps({
+                        "command": "move",
+                        "dx": dx,
+                        "dy": dy,
+                        "dtheta": dtheta,
+                        "speed": speed,
+                        "acceleration": accel,
+                        "subdivision": subdiv
+                    })
+                
+                elif cmd_type == "stop":
+                    command = json.dumps({"command": "stop"})
+                
+                elif cmd_type == "status" or cmd_type == "get_status":
+                    command = json.dumps({"command": "get_status"})
+                
+                elif cmd_type == "interval" and len(parts) >= 2:
+                    interval = int(parts[1])
+                    command = json.dumps({
+                        "command": "set_interval",
+                        "interval": interval
+                    })
+                
+                elif cmd_type == "wifi" and len(parts) >= 3:
                     ssid = parts[1]
                     password = parts[2]
-                    controller.set_wifi(ssid, password)
-                except IndexError:
-                    print("用法: wifi <ssid> <password>")
-            
-            else:
-                print(f"未知命令: {command}")
-    
-    except KeyboardInterrupt:
-        print("\n程序已中断")
-    finally:
-        controller.close()
-
-
-def demo_mode(controller, demo_type="basic"):
-    """
-    演示模式
-    
-    Args:
-        controller: 控制器对象
-        demo_type: 演示类型，可选 "basic"、"square"、"circle"
-    """
-    controller.start_status_listener(print_status)
-    
-    try:
-        print(f"\n开始 {demo_type} 演示...")
-        
-        if demo_type == "basic":
-            # 基础演示：前进、后退、旋转
-            print("前进 0.5 m/s，持续 2 秒")
-            controller.set_speed(0.5)
-            time.sleep(2)
-            
-            print("停止")
-            controller.stop()
-            time.sleep(1)
-            
-            print("后退 0.5 m/s，持续 2 秒")
-            controller.set_speed(-0.5)
-            time.sleep(2)
-            
-            print("停止")
-            controller.stop()
-            time.sleep(1)
-            
-            print("原地旋转，持续 2 秒")
-            controller.set_speed(0, 0, 0.5)
-            time.sleep(2)
-            
-            print("停止")
-            controller.stop()
-        
-        elif demo_type == "square":
-            # 方形路径演示
-            side_length = 0.5  # 边长 0.5 米
-            
-            for i in range(4):
-                print(f"移动第 {i+1} 条边")
-                controller.move_distance(side_length, 0, 0)
-                time.sleep(3)  # 等待移动完成
+                    command = json.dumps({
+                        "command": "set_wifi",
+                        "ssid": ssid,
+                        "password": password
+                    })
                 
-                print("旋转 90 度")
-                controller.move_distance(0, 0, 1.57)  # 约 90 度
-                time.sleep(2)  # 等待旋转完成
+                else:
+                    print(f"{Fore.RED}未知命令: {command}{Style.RESET_ALL}")
+                    return
             
-            print("方形路径完成")
+            # 发送命令
+            print(f"{Fore.GREEN}发送: {command}{Style.RESET_ALL}")
+            self.serial.write((command + '\n').encode('utf-8'))
+            self.serial.flush()
         
-        elif demo_type == "circle":
-            # 圆形路径演示（通过速度模式实现）
-            print("开始圆形运动，持续 10 秒")
-            controller.set_speed(0.3, 0, 0.5)  # 前进速度和旋转速度组合形成圆形路径
-            time.sleep(10)
-            
-            print("停止")
-            controller.stop()
-        
-        else:
-            print(f"未知演示类型: {demo_type}")
+        except Exception as e:
+            print(f"{Fore.RED}发送命令时出错: {e}{Style.RESET_ALL}")
     
-    except KeyboardInterrupt:
-        print("\n演示已中断")
-    finally:
-        controller.stop()
-        time.sleep(0.5)
-        controller.close()
+    def get_latest_status(self):
+        """获取最新的小车状态"""
+        with self.status_lock:
+            return self.latest_status
+    
+    def close(self):
+        """关闭控制器，释放资源"""
+        self.running = False
+        if self.rx_thread.is_alive():
+            self.rx_thread.join(1.0)  # 等待接收线程结束
+        if self.serial.is_open:
+            self.serial.close()
 
+def run_demo(controller, demo_type):
+    """运行演示模式"""
+    print(f"{Fore.MAGENTA}开始 {demo_type} 演示...{Style.RESET_ALL}")
+    
+    if demo_type == "basic":
+        # 基础演示：前进、停止、后退、停止
+        controller.send_command('{"command":"speed","vx":0.5,"vy":0,"omega":0}')
+        time.sleep(2)
+        controller.send_command('{"command":"stop"}')
+        time.sleep(1)
+        controller.send_command('{"command":"speed","vx":-0.5,"vy":0,"omega":0}')
+        time.sleep(2)
+        controller.send_command('{"command":"stop"}')
+    
+    elif demo_type == "square":
+        # 方形路径演示
+        # 前进1米
+        controller.send_command('{"command":"move","dx":1.0,"dy":0,"dtheta":0,"speed":0.5}')
+        time.sleep(3)
+        # 左转90度
+        controller.send_command('{"command":"move","dx":0,"dy":0,"dtheta":1.57,"speed":0.5}')
+        time.sleep(2)
+        # 前进1米
+        controller.send_command('{"command":"move","dx":1.0,"dy":0,"dtheta":0,"speed":0.5}')
+        time.sleep(3)
+        # 左转90度
+        controller.send_command('{"command":"move","dx":0,"dy":0,"dtheta":1.57,"speed":0.5}')
+        time.sleep(2)
+        # 前进1米
+        controller.send_command('{"command":"move","dx":1.0,"dy":0,"dtheta":0,"speed":0.5}')
+        time.sleep(3)
+        # 左转90度
+        controller.send_command('{"command":"move","dx":0,"dy":0,"dtheta":1.57,"speed":0.5}')
+        time.sleep(2)
+        # 前进1米
+        controller.send_command('{"command":"move","dx":1.0,"dy":0,"dtheta":0,"speed":0.5}')
+        time.sleep(3)
+        # 左转90度（回到原点和方向）
+        controller.send_command('{"command":"move","dx":0,"dy":0,"dtheta":1.57,"speed":0.5}')
+        time.sleep(2)
+    
+    elif demo_type == "circle":
+        # 圆形路径演示 - 使用速度模式
+        print("开始圆形运动...")
+        # 设置前进速度和角速度，形成圆周运动
+        controller.send_command('{"command":"speed","vx":0.5,"vy":0,"omega":0.5}')
+        time.sleep(12.56)  # 大约走完一个圆 (2*pi/0.5 = 12.56秒)
+        controller.send_command('{"command":"stop"}')
+    
+    print(f"{Fore.MAGENTA}演示结束{Style.RESET_ALL}")
 
 def main():
     """主函数"""
     parser = argparse.ArgumentParser(description="ESP32小车USB串口控制测试程序")
     parser.add_argument("--port", "-p", required=False, default="/dev/ttyACM0", help="串口设备，如 /dev/ttyUSB0 或 COM3")
-    parser.add_argument("--baudrate", "-b", type=int, default=115200, help="波特率，默认115200")
+    parser.add_argument("--baudrate", "-b", type=int, default=460800, help="波特率，默认460800")
     parser.add_argument("--demo", "-d", choices=["basic", "square", "circle"], help="运行演示模式")
     
     args = parser.parse_args()
     
     try:
+        print(f"{Fore.GREEN}连接到小车控制器 ({args.port}, {args.baudrate})...{Style.RESET_ALL}")
         controller = CarController(args.port, args.baudrate)
         
+        # 如果指定了演示模式，运行演示后退出
         if args.demo:
-            demo_mode(controller, args.demo)
-        else:
-            interactive_mode(controller)
+            run_demo(controller, args.demo)
+            controller.close()
+            return
+        
+        print(f"{Fore.GREEN}连接成功! 输入命令控制小车，输入 'exit' 或 'quit' 退出{Style.RESET_ALL}")
+        print(f"{Fore.YELLOW}支持的简单命令格式:{Style.RESET_ALL}")
+        print("  speed <vx> [vy] [omega] [acceleration]")
+        print("  move <dx> [dy] [dtheta] [speed] [acceleration] [subdivision]")
+        print("  stop")
+        print("  status 或 get_status")
+        print("  interval <ms>")
+        print("  wifi <ssid> <password>")
+        print(f"{Fore.YELLOW}也可以直接输入JSON格式命令{Style.RESET_ALL}")
+        
+        # 主循环 - 读取用户输入并发送命令
+        while True:
+            try:
+                command = input(f"{Fore.GREEN}> {Style.RESET_ALL}")
+                if command.lower() in ['exit', 'quit']:
+                    break
+                
+                if command.strip():
+                    controller.send_command(command)
+            
+            except KeyboardInterrupt:
+                print("\n退出...")
+                break
+            
+            except Exception as e:
+                print(f"{Fore.RED}错误: {e}{Style.RESET_ALL}")
+        
+        controller.close()
+        print(f"{Fore.GREEN}已断开连接{Style.RESET_ALL}")
     
     except serial.SerialException as e:
-        print(f"串口错误: {e}")
+        print(f"{Fore.RED}无法打开串口 {args.port}: {e}{Style.RESET_ALL}")
+    
     except Exception as e:
-        print(f"程序错误: {e}")
-
+        print(f"{Fore.RED}发生错误: {e}{Style.RESET_ALL}")
 
 if __name__ == "__main__":
     main()

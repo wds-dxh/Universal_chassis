@@ -14,6 +14,7 @@
 #include "task/Usb_Control.hpp"
 #include "utils/Logger.hpp"
 #include "config.h"
+#include "control/ControlManager.hpp"
 
 // 初始化 ESP32 硬件串口（示例使用 Serial00）
 HardwareSerial Serial00(0);
@@ -32,14 +33,14 @@ NormalWheelKinematics normalKinematics(0.09f, 0.45f, 6);
 CarController carController(&motor1, &motor2, &motor3, &motor4, &motor0, &normalKinematics);
 
 // 在全局声明 MQTT 控制对象
-MqttControl mqttControl(&carController, 1000); // 默认1000ms发布一次状态
+MqttControl mqttControl(10); // 默认1000ms发布一次状态
 
 // 在全局声明 USB 控制对象
-UsbControl usbControl(&carController, 1000);
+UsbControl usbControl(100);
 
 void setup() {
     Serial00.begin(115200, SERIAL_8N1, RX, TX);
-    Serial.begin(115200);
+    Serial.begin(460800); 
     
     // 初始化日志系统，默认为NONE级别（不输出任何日志）
     // 可以通过编译时定义DEBUG_MODE来启用调试日志
@@ -52,11 +53,13 @@ void setup() {
     
     Logger::info("MAIN", "System initializing...");
 
-    // 启动 USB 控制接口
-    usbControl.begin();
     
-    // 启动 MQTT 控制
+    // 初始化ControlManager
+    ControlManager::getInstance().init(&carController);
+    
     mqttControl.begin();
+    
+    usbControl.begin();
     
     // 连接到默认WiFi网络
     usbControl.connectToWiFi(DEFAULT_WIFI_SSID, DEFAULT_WIFI_PASSWORD);

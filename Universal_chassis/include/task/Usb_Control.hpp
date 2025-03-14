@@ -2,7 +2,7 @@
 
 #include <Arduino.h>
 #include <ArduinoJson.h>
-#include "CarController/CarController.h"
+#include "control/ControlManager.hpp"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
@@ -27,10 +27,13 @@
 class UsbControl {
 public:
     /**
-     * @brief 构造函数，传入 CarController 对象指针
+     * @brief 构造函数
      */
-    explicit UsbControl(CarController* carCtrl, uint32_t statusInterval = 100)
-        : carController(carCtrl), statusInterval(statusInterval) {}
+    explicit UsbControl(uint32_t statusInterval = 100)
+        : statusInterval(statusInterval) {
+        // 获取控制管理器实例
+        controlManager = &ControlManager::getInstance();
+    }
 
     /**
      * @brief 初始化 USB 控制
@@ -42,7 +45,7 @@ public:
     /**
      * @brief 发布当前小车状态到 USB（Serial）
      *
-     * 获取 CarController 的状态信息，并以 JSON 格式通过虚拟串口发送出去。
+     * 获取控制管理器的状态信息，并以 JSON 格式通过虚拟串口发送出去。
      */
     void publishStatus();
 
@@ -67,7 +70,7 @@ private:
     // 处理接收到的命令
     void processCommand(const String& command);
     
-    CarController* carController;
+    ControlManager* controlManager;
     // 自动发送状态的时间间隔（单位：毫秒），非0表示启用自动发布状态
     uint32_t statusInterval;
     // USB 控制任务句柄
@@ -177,7 +180,7 @@ void UsbControl::processCommand(const String& commandStr) {
         float omega = doc["omega"] | 0.0;
         float acceleration = doc["acceleration"] | 10.0;
         Logger::debug(USB_TAG, "Speed command: vx=%.2f, vy=%.2f, omega=%.2f", vx, vy, omega);
-        carController->setSpeed(vx, vy, omega, acceleration);
+        controlManager->setSpeed(vx, vy, omega, acceleration);
     } 
     else if (strcmp(command, "move") == 0) {
         float dx = doc["dx"] | 0.0;
@@ -187,11 +190,11 @@ void UsbControl::processCommand(const String& commandStr) {
         float acceleration = doc["acceleration"] | 10.0;
         uint16_t subdivision = doc["subdivision"] | 256;
         Logger::debug(USB_TAG, "Move command: dx=%.2f, dy=%.2f, dtheta=%.2f, speed=%.2f", dx, dy, dtheta, speed);
-        carController->moveDistance(dx, dy, dtheta, acceleration, speed, subdivision);
+        controlManager->moveDistance(dx, dy, dtheta, acceleration, speed, subdivision);
     } 
     else if (strcmp(command, "stop") == 0) {
         Logger::debug(USB_TAG, "Stop command");
-        carController->stop();
+        controlManager->stop();
     } 
     else if (strcmp(command, "get_status") == 0) {
         Logger::debug(USB_TAG, "Status request");
@@ -219,8 +222,8 @@ void UsbControl::processCommand(const String& commandStr) {
 }
 
 void UsbControl::publishStatus() {
-    // 获取当前小车状态
-    CarState state = carController->getCarState();
+    // 获取当前小车状态 - 从控制管理器获取
+    CarState state = controlManager->getCarState();
     JsonDocument doc;
     doc["vx"] = state.vx;
     doc["vy"] = state.vy;

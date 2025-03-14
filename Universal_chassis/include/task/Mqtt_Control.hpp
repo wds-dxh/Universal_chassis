@@ -3,15 +3,18 @@
 #include <WiFi.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
-#include "CarController/CarController.h"
+#include "control/ControlManager.hpp"
 #include "utils/Logger.hpp"
 #include "config.h"
 
 class MqttControl
 {
 public:
-    explicit MqttControl(CarController *carCtrl, uint32_t statusInterval = 1000) 
-        : carController(carCtrl), statusInterval(statusInterval) {}
+    explicit MqttControl(uint32_t statusInterval = 1000) 
+        : statusInterval(statusInterval) {
+        // 获取控制管理器实例
+        controlManager = &ControlManager::getInstance();
+    }
 
     // 初始化 MQTT 并启动 FreeRTOS 任务
     void begin();
@@ -38,6 +41,9 @@ public:
 private:
     // MQTT 接收到消息的回调函数（static 供 PubSubClient 使用）
     static void mqttCallback(char *topic, byte *payload, unsigned int length);
+    
+    // 处理接收到的命令
+    void processCommand(const String& commandStr);
 
     // 尝试连接到 MQTT Broker
     void connectMQTT();
@@ -45,7 +51,7 @@ private:
     // 静态实例指针，供回调函数使用
     static MqttControl *instance;
 
-    CarController *carController;
+    ControlManager* controlManager;
     WiFiClient wifiClient;
     PubSubClient mqttClient{wifiClient};
 
@@ -182,8 +188,8 @@ void MqttControl::publishStatus()
         return;
     }
     
-    // 获取当前小车状态
-    CarState state = carController->getCarState();
+    // 获取当前小车状态 - 从控制管理器获取
+    CarState state = controlManager->getCarState();
 
     JsonDocument doc;
     doc["vx"] = state.vx;
@@ -212,8 +218,19 @@ void MqttControl::mqttCallback(char *topic, byte *payload, unsigned int length)
     }
     Logger::debug(MQTT_TAG, "Payload: %s", message.c_str());
 
+    // 将消息传递给实例的处理方法
+    if (instance) {
+        instance->processCommand(message);
+    }
+}
+
+void MqttControl::processCommand(const String& commandStr)
+{
+    if (commandStr.length() == 0) return;
+    
+    // 解析 JSON 数据
     JsonDocument doc;
-    DeserializationError error = deserializeJson(doc, message);
+    DeserializationError error = deserializeJson(doc, commandStr);
     if (error)
     {
         Logger::error(MQTT_TAG, "JSON Parse failed: %s", error.c_str());
@@ -227,7 +244,7 @@ void MqttControl::mqttCallback(char *topic, byte *payload, unsigned int length)
         return;
     }
 
-    // 根据命令调用 CarController 接口
+    // 根据命令调用 ControlManager 接口
     if (strcmp(command, "speed") == 0)
     {
         float vx = doc["vx"] | 0.0;
@@ -235,11 +252,7 @@ void MqttControl::mqttCallback(char *topic, byte *payload, unsigned int length)
         float omega = doc["omega"] | 0.0;
         float acceleration = doc["acceleration"] | 10.0;
         Logger::info(MQTT_TAG, "Executing speed command: vx=%.2f, vy=%.2f, omega=%.2f", vx, vy, omega);
-        if (instance && instance->carController)
-        {
-            // 调用带自定义加速度的速度模式接口
-            instance->carController->setSpeed(vx, vy, omega, acceleration);
-        }
+        controlManager->setSpeed(vx, vy, omega, acceleration);
     }
     else if (strcmp(command, "move") == 0)
     {
@@ -250,34 +263,24 @@ void MqttControl::mqttCallback(char *topic, byte *payload, unsigned int length)
         float acceleration = doc["acceleration"] | 10.0;
         uint16_t subdivision = doc["subdivision"] | 256;
         Logger::info(MQTT_TAG, "Executing move command: dx=%.2f, dy=%.2f, dtheta=%.2f, speed=%.2f", dx, dy, dtheta, speed);
-        if (instance && instance->carController)
-        {
-            instance->carController->moveDistance(dx, dy, dtheta, acceleration, speed, subdivision);
-        }
+        controlManager->moveDistance(dx, dy, dtheta, acceleration, speed, subdivision);
     }
     else if (strcmp(command, "stop") == 0)
     {
         Logger::info(MQTT_TAG, "Executing stop command");
-        if (instance && instance->carController)
-        {
-            instance->carController->stop();
-        }
+        controlManager->stop();
     }
     else if (strcmp(command, "get_status") == 0)
     {
         Logger::info(MQTT_TAG, "Status request received");
-        if (instance) {
-            instance->publishStatus();
-        }
+        publishStatus();
     }
     else if (strcmp(command, "set_interval") == 0)
     {
         // 处理设置状态发布间隔命令
         uint32_t interval = doc["interval"] | 1000;
         Logger::info(MQTT_TAG, "Setting status interval to %d ms", interval);
-        if (instance) {
-            instance->setStatusInterval(interval);
-        }
+        setStatusInterval(interval);
     }
     else if (strcmp(command, "set_wifi") == 0)
     {
@@ -287,12 +290,10 @@ void MqttControl::mqttCallback(char *topic, byte *payload, unsigned int length)
         
         if (ssid && password) {
             Logger::info(MQTT_TAG, "Setting WiFi: SSID=%s", ssid);
-            if (instance) {
-                // 断开当前MQTT连接
-                instance->mqttClient.disconnect();
-                // 尝试连接到新的WiFi
-                instance->connectToWiFi(ssid, password);
-            }
+            // 断开当前MQTT连接
+            mqttClient.disconnect();
+            // 尝试连接到新的WiFi
+            connectToWiFi(ssid, password);
         } else {
             Logger::warn(MQTT_TAG, "Invalid WiFi settings");
         }
