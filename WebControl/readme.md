@@ -152,7 +152,7 @@ universal-chassis-control/
 
 ## 许可证
 
-本项目采用Apache License 2.0许可证 - 详情请参见[LICENSE](LICENSE)文件
+本项目采用Apache License 2.0许可证 - 详情请参见[LICENSE](../LICENSE)文件
 
 ## 作者
 
