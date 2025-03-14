@@ -23,6 +23,7 @@ struct ControlCommand {
     float param4;  // acceleration
     float param5;  // speed (仅用于MOVE命令)
     uint16_t param6; // subdivision (仅用于MOVE命令)
+    uint32_t timestamp; // 命令时间戳，用于判断新旧
 };
 
 // 控制管理器类 - 单例模式
@@ -46,8 +47,21 @@ public:
             "cmdProcessTask",
             4096,
             this,
-            2, // 优先级高于MQTT和USB任务
+            3, // 提高优先级，确保命令能及时处理
             &commandTaskHandle
+        );
+        
+        // 启动状态更新任务 - 独立于命令处理
+        xTaskCreate(
+            [](void* param) {
+                ControlManager* manager = static_cast<ControlManager*>(param);
+                manager->updateStateTask();
+            },
+            "stateUpdateTask",
+            4096,
+            this,
+            1, // 较低优先级
+            &stateTaskHandle
         );
     }
 
@@ -59,10 +73,11 @@ public:
         cmd.param2 = vy;
         cmd.param3 = omega;
         cmd.param4 = acceleration;
+        cmd.timestamp = millis();
         
-        // 添加到命令队列
+        // 添加到命令队列，替换同类型的旧命令
         std::lock_guard<std::mutex> lock(commandMutex);
-        commandQueue.push(cmd);
+        replaceCommand(cmd);
     }
 
     // 移动距离命令
@@ -76,38 +91,47 @@ public:
         cmd.param4 = acceleration;
         cmd.param5 = speed;
         cmd.param6 = subdivision;
+        cmd.timestamp = millis();
         
-        // 添加到命令队列
+        // 添加到命令队列，替换同类型的旧命令
         std::lock_guard<std::mutex> lock(commandMutex);
-        commandQueue.push(cmd);
+        replaceCommand(cmd);
     }
 
-    // 停止命令
+    // 停止命令 - 停止命令始终优先处理
     void stop() {
         ControlCommand cmd;
         cmd.type = CommandType::STOP;
+        cmd.timestamp = millis();
         
-        // 添加到命令队列 - 停止命令优先处理
+        // 停止命令优先处理，清空队列
         std::lock_guard<std::mutex> lock(commandMutex);
-        // 清空队列中的其他命令
         while (!commandQueue.empty()) {
             commandQueue.pop();
         }
         commandQueue.push(cmd);
+        
+        // 直接调用停止，不等待任务处理
+        if (carController) {
+            carController->stop();
+        }
     }
 
-    // 获取当前状态 - 直接返回缓存的状态
+    // 获取当前小车状态 - 使用缓存
     CarState getCarState() {
         std::lock_guard<std::mutex> lock(stateMutex);
-        // 如果状态过期，则更新状态
-        uint32_t now = millis();
-        if (now - lastStateUpdateTime > stateUpdateInterval) {
-            if (carController) {
-                cachedState = carController->getCarState();
-                lastStateUpdateTime = now;
-            }
-        }
         return cachedState;
+    }
+
+    // 强制更新状态
+    void forceUpdateState() {
+        ControlCommand cmd;
+        cmd.type = CommandType::GET_STATUS;
+        cmd.timestamp = millis();
+        
+        std::lock_guard<std::mutex> lock(commandMutex);
+        // 不替换，直接添加到队列
+        commandQueue.push(cmd);
     }
 
     // 设置状态更新间隔
@@ -117,17 +141,40 @@ public:
 
 private:
     // 私有构造函数 - 单例模式
-    ControlManager() : lastStateUpdateTime(0), stateUpdateInterval(100) {}
+    ControlManager() : lastStateUpdateTime(0), stateUpdateInterval(50) {}
     
     // 禁止拷贝和赋值
     ControlManager(const ControlManager&) = delete;
     ControlManager& operator=(const ControlManager&) = delete;
+    
+    // 替换队列中同类型的命令
+    void replaceCommand(const ControlCommand& newCmd) {
+        // 创建临时队列
+        std::queue<ControlCommand> tempQueue;
+        
+        // 遍历原队列，保留不同类型的命令
+        while (!commandQueue.empty()) {
+            ControlCommand cmd = commandQueue.front();
+            commandQueue.pop();
+            
+            // 如果不是同类型命令，保留
+            if (cmd.type != newCmd.type) {
+                tempQueue.push(cmd);
+            }
+        }
+        
+        // 添加新命令
+        tempQueue.push(newCmd);
+        
+        // 恢复队列
+        commandQueue = std::move(tempQueue);
+    }
 
     // 命令处理任务
     void processCommandsTask() {
         for (;;) {
-            ControlCommand cmd;
             bool hasCommand = false;
+            ControlCommand cmd;
             
             // 获取命令
             {
@@ -162,29 +209,46 @@ private:
                     
                     case CommandType::GET_STATUS:
                         // 强制更新状态
-                        {
-                            std::lock_guard<std::mutex> lock(stateMutex);
-                            cachedState = carController->getCarState();
-                            lastStateUpdateTime = millis();
-                        }
+                        updateState(true);
                         break;
-                }
-                
-                // 更新状态缓存
-                {
-                    std::lock_guard<std::mutex> lock(stateMutex);
-                    cachedState = carController->getCarState();
-                    lastStateUpdateTime = millis();
                 }
             }
             
-            // 短暂延时
-            vTaskDelay(pdMS_TO_TICKS(10));
+            // 更短的延时，提高响应速度
+            vTaskDelay(pdMS_TO_TICKS(5));
+        }
+    }
+    
+    // 状态更新任务 - 独立于命令处理
+    void updateStateTask() {
+        for (;;) {
+            updateState(false);
+            vTaskDelay(pdMS_TO_TICKS(stateUpdateInterval));
+        }
+    }
+    
+    // 更新状态
+    void updateState(bool force) {
+        uint32_t now = millis();
+        
+        // 如果强制更新或者状态过期
+        if (force || (now - lastStateUpdateTime > stateUpdateInterval)) {
+            if (carController) {
+                CarState newState = carController->getCarState();
+                
+                // 更新缓存
+                {
+                    std::lock_guard<std::mutex> lock(stateMutex);
+                    cachedState = newState;
+                    lastStateUpdateTime = now;
+                }
+            }
         }
     }
 
     CarController* carController = nullptr;
     TaskHandle_t commandTaskHandle = nullptr;
+    TaskHandle_t stateTaskHandle = nullptr;
     
     // 命令队列和互斥锁
     std::queue<ControlCommand> commandQueue;

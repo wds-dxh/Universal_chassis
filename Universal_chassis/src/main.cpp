@@ -36,7 +36,7 @@ CarController carController(&motor1, &motor2, &motor3, &motor4, &motor0, &normal
 MqttControl mqttControl(10); // 默认1000ms发布一次状态
 
 // 在全局声明 USB 控制对象
-UsbControl usbControl(100);
+UsbControl usbControl(0);
 
 void setup() {
     Serial00.begin(115200, SERIAL_8N1, RX, TX);
