@@ -23,7 +23,11 @@
 // 串口接收缓冲区大小
 #define SERIAL_RX_BUFFER_SIZE 512
 
+// USB 传输 JSON 缓冲区大小
+#define USB_JSON_BUFFER_SIZE 1024
+
+
 // 日志标签
 #define MQTT_TAG "MQTT"
-#define USB_TAG "USB"
 #define WIFI_TAG "WIFI"
+#define USB_TAG "USB"

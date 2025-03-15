@@ -251,8 +251,9 @@ void MqttControl::processCommand(const String& commandStr)
         float vy = doc["vy"] | 0.0;
         float omega = doc["omega"] | 0.0;
         float acceleration = doc["acceleration"] | 10.0;
-        Logger::info(MQTT_TAG, "Executing speed command: vx=%.2f, vy=%.2f, omega=%.2f", vx, vy, omega);
-        controlManager->setSpeed(vx, vy, omega, acceleration);
+        uint16_t subdivision = doc["subdivision"] | 256;
+        Logger::info(MQTT_TAG, "Executing speed command: vx=%.2f, vy=%.2f, omega=%.2f, subdivision=%d", vx, vy, omega, subdivision);
+        controlManager->setSpeed(vx, vy, omega, acceleration, subdivision);
     }
     else if (strcmp(command, "move") == 0)
     {

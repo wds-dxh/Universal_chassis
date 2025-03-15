@@ -37,12 +37,12 @@ void CarController::configure(const CarControllerConfig& config) {
 
 // 速度模式控制（使用默认加速度）
 bool CarController::setSpeed(float vx, float vy, float omega) {
-    return setSpeed(vx, vy, omega, defaultConfig.defaultAcceleration);       //加速度调用默认加速度
+    return setSpeed(vx, vy, omega, defaultConfig.defaultAcceleration, defaultConfig.defaultSubdivision);       //加速度调用默认加速度
 }
 
 // 速度模式控制（自定义加速度）  
 // 本函数通过运动学模型计算各电机的转速指令，并将负值转为方向信息传递给电机控制
-bool CarController::setSpeed(float vx, float vy, float omega, float acceleration) {
+bool CarController::setSpeed(float vx, float vy, float omega, float acceleration, uint16_t subdivision) {
     // 计算速度指令
     // 注意：这里假设运动学模型的 calculateSpeedCommands 输出类型已修改为 std::array<int16_t, 4>
     std::array<int16_t, 4> speedCommands;

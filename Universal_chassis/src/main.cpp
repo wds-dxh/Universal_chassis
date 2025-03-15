@@ -33,10 +33,10 @@ NormalWheelKinematics normalKinematics(0.09f, 0.45f, 6);
 CarController carController(&motor1, &motor2, &motor3, &motor4, &motor0, &normalKinematics);
 
 // 在全局声明 MQTT 控制对象
-MqttControl mqttControl(0); // 默认1000ms发布一次状态
+MqttControl mqttControl(100); // 默认1000ms发布一次状态
 
 // 在全局声明 USB 控制对象
-UsbControl usbControl(0);
+UsbControl usbControl(100);
 
 void setup() {
     Serial00.begin(115200, SERIAL_8N1, RX, TX);

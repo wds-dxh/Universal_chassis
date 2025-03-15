@@ -66,13 +66,14 @@ public:
     }
 
     // 设置速度命令
-    void setSpeed(float vx, float vy, float omega, float acceleration = 10.0f) {
+    void setSpeed(float vx, float vy, float omega, float acceleration = 10.0f, uint16_t subdivision = 256) {
         ControlCommand cmd;
         cmd.type = CommandType::SPEED;
         cmd.param1 = vx;
         cmd.param2 = vy;
         cmd.param3 = omega;
         cmd.param4 = acceleration;
+        cmd.param6 = subdivision;
         cmd.timestamp = millis();
         
         // 添加到命令队列，替换同类型的旧命令
@@ -190,9 +191,9 @@ private:
             if (hasCommand && carController) {
                 switch (cmd.type) {
                     case CommandType::SPEED:
-                        Logger::debug("ControlManager", "Executing speed command: vx=%.2f, vy=%.2f, omega=%.2f", 
-                                     cmd.param1, cmd.param2, cmd.param3);
-                        carController->setSpeed(cmd.param1, cmd.param2, cmd.param3, cmd.param4);
+                        Logger::debug("ControlManager", "Executing speed command: vx=%.2f, vy=%.2f, omega=%.2f, subdivision=%d", 
+                                     cmd.param1, cmd.param2, cmd.param3, cmd.param6);
+                        carController->setSpeed(cmd.param1, cmd.param2, cmd.param3, cmd.param4,cmd.param6);
                         break;
                     
                     case CommandType::MOVE:

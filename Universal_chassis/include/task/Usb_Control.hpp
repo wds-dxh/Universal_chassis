@@ -9,15 +9,6 @@
 #include "utils/Logger.hpp"
 #include "config.h"
 
-// 定义 USB 传输 JSON 缓冲区大小
-#define USB_JSON_BUFFER_SIZE 256
-
-// 日志标签
-#define USB_TAG "USB"
-
-// 串口接收缓冲区大小
-#define SERIAL_RX_BUFFER_SIZE 512
-
 /**
  * @brief USB 控制类
  *
@@ -179,8 +170,9 @@ void UsbControl::processCommand(const String& commandStr) {
         float vy = doc["vy"] | 0.0;
         float omega = doc["omega"] | 0.0;
         float acceleration = doc["acceleration"] | 10.0;
-        Logger::debug(USB_TAG, "Speed command: vx=%.2f, vy=%.2f, omega=%.2f", vx, vy, omega);
-        controlManager->setSpeed(vx, vy, omega, acceleration);
+        uint16_t subdivision = doc["subdivision"] | 256;
+        Logger::debug(USB_TAG, "Speed command: vx=%.2f, vy=%.2f, omega=%.2f, subdivision=%d", vx, vy, omega, subdivision);
+        controlManager->setSpeed(vx, vy, omega, acceleration, subdivision);
     } 
     else if (strcmp(command, "move") == 0) {
         float dx = doc["dx"] | 0.0;
