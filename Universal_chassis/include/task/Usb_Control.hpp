@@ -171,7 +171,8 @@ void UsbControl::processCommand(const String& commandStr) {
         float omega = doc["omega"] | 0.0;
         float acceleration = doc["acceleration"] | 10.0;
         uint16_t subdivision = doc["subdivision"] | 256;
-        Logger::debug(USB_TAG, "Speed command: vx=%.2f, vy=%.2f, omega=%.2f, subdivision=%d", vx, vy, omega, subdivision);
+        Logger::debug(USB_TAG, "Speed command: vx=%.2f, vy=%.2f, omega=%.2f, subdivision=%d", 
+                     vx, vy, omega, subdivision);
         controlManager->setSpeed(vx, vy, omega, acceleration, subdivision);
     } 
     else if (strcmp(command, "move") == 0) {
