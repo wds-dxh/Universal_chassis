@@ -31,3 +31,17 @@
 #define MQTT_TAG "MQTT"
 #define WIFI_TAG "WIFI"
 #define USB_TAG "USB"
+
+// MicroROS配置
+#define MICROROS_AGENT_IP "192.168.8.189"
+#define MICROROS_AGENT_PORT 8888
+
+// MicroROS主题
+#define MICROROS_TOPIC_CMD_VEL "/cmd_vel"
+#define MICROROS_TOPIC_ODOM "/odom"
+
+// MicroROS节点名称
+#define MICROROS_NODE_NAME "esp32_car_controller"
+
+// MicroROS日志标签
+#define MICROROS_TAG "MICROROS"

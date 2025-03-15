@@ -227,12 +227,7 @@ void UsbControl::publishStatus() {
     }
     char buffer[USB_JSON_BUFFER_SIZE];
     size_t n = serializeJson(doc, buffer);
-
-    //获取里程计
-    Odometer odom = controlManager->getOdometer();
-    Serial.printf("Odometer: x=%.2f, y=%.2f, theta=%.2f, vx=%.2f, vy=%.2f, omega=%.2f\n", 
-                 odom.x, odom.y, odom.theta, odom.vx, odom.vy, odom.omega);
     
     // 将 JSON 状态数据发送到 USB 虚拟串口
-    // Serial.println(buffer);
+    Serial.println(buffer);
 }
