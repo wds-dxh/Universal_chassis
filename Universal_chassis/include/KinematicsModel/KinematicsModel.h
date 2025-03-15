@@ -43,6 +43,9 @@ public:
     virtual void calculatePositionCommands(float dx, float dy, float dtheta,
                                          std::array<int32_t, 4>& pulses,
                                          uint16_t subdivision) = 0;
+    //根据轮子转速计算vx以及theta
+    virtual void calculateWheelSpeeds(std::array<int16_t, 4>& speeds,
+                             float& vx, float& vy, float& omega) = 0;
 };
 
 /**
@@ -126,6 +129,9 @@ public:
     virtual void calculatePositionCommands(float dx, float dy, float dtheta,
                                          std::array<int32_t, 4>& pulses,
                                          uint16_t subdivision) override;
+    //根据轮子转速计算vx以及theta
+    virtual void calculateWheelSpeeds(std::array<int16_t, 4>& speeds,
+                             float& vx, float& vy, float& omega) override;
 private:   //-------硬件参数都是用运动学模型输入，软件参数如细分数，加速度，速度等都是用CarController输入
     float wheelRadius;       // 轮子半径
     float wheelCircumference;  // 内部计算得出：2 * PI * wheelRadius

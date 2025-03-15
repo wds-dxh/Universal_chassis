@@ -49,6 +49,29 @@ void NormalWheelKinematics::calculatePositionCommands(float dx, float dy, float 
     pulses[3] = static_cast<int32_t>(std::lround(pulses_forward - pulses_rotation)*reductionRatio);  // 左前轮
 }
 
+void NormalWheelKinematics::calculateWheelSpeeds(std::array<int16_t, 4>& speeds,
+                             float& vx, float& vy, float& omega) {
+                                
+
+    float wheelSpeed1 = speeds[0] * wheelCircumference / 60.0f / reductionRatio;
+    float wheelSpeed2 = speeds[1] * wheelCircumference / 60.0f / reductionRatio;
+    float wheelSpeed3 = speeds[2] * wheelCircumference / 60.0f / reductionRatio;
+    float wheelSpeed4 = speeds[3] * wheelCircumference / 60.0f / reductionRatio;
+    Serial.println("wheelSpeed1: ");
+    Serial.println(wheelSpeed1);
+    Serial.println("wheelSpeed2: ");
+    Serial.println(wheelSpeed2);
+    Serial.println("wheelSpeed3: ");
+    Serial.println(wheelSpeed3);
+    Serial.println("wheelSpeed4: ");
+    Serial.println(wheelSpeed4);
+
+    //由轮子的转速计算轮子的线速度--0123分别对应右上，右下，左下，左上.注意轮速度
+    vx = (wheelSpeed1 + wheelSpeed2) / 2.0f;
+    vy = 0;
+    omega = (wheelSpeed1 + wheelSpeed3) / (2.0f * trackWidth);
+}
+
 //======================= MecanumKinematics 空实现 ========================
 
 MecanumKinematics::MecanumKinematics(float wheelRadius, float wheelBase, float trackWidth)

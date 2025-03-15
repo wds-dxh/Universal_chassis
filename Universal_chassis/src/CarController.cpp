@@ -174,13 +174,9 @@ CarState CarController::getCarState() {
     speeds[1] = static_cast<uint16_t>(sRR);
     speeds[2] = static_cast<uint16_t>(sLR);
     speeds[3] = static_cast<uint16_t>(sLF);
+    // 如果有符号整数的值是负数，那么转换为无符号类型后，它的值会变成一个大的正数
+    kinematics->calculateWheelSpeeds(reinterpret_cast<std::array<int16_t, 4>&>(speeds),currentState.vx,currentState.vy,currentState.omega);
     
     currentState.wheelSpeeds = speeds;
-    
-    // 这里未做逆运动学计算，故 vx,vy,omega 暂置 0
-    currentState.vx = 0;
-    currentState.vy = 0;
-    currentState.omega = 0;
-    
     return currentState;
 }
