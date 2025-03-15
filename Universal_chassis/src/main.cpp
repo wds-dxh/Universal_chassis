@@ -16,6 +16,8 @@
 #include "config.h"
 #include "control/ControlManager.hpp"
 
+
+
 // 初始化 ESP32 硬件串口（示例使用 Serial00）
 HardwareSerial Serial00(0);
 
@@ -39,7 +41,7 @@ MqttControl mqttControl(100); // 默认1000ms发布一次状态
 UsbControl usbControl(100);
 
 void setup() {
-    Serial00.begin(115200, SERIAL_8N1, RX, TX);
+    Serial00.begin(961200, SERIAL_8N1, RX, TX);
     Serial.begin(115200); 
     
     // 初始化日志系统，默认为NONE级别（不输出任何日志）
@@ -71,4 +73,4 @@ void loop() {
     // 主 loop 中无需过多处理，MQTT和USB任务已在后台运行
     vTaskDelay(pdMS_TO_TICKS(1000));
 }
-
+ 
